@@ -2,6 +2,14 @@
 // All paths are scoped to the directory the user explicitly selected.
 export function nativeFS(root) {
   const error = (code, path) => Object.assign(new Error(`${code}: ${path}`), { code });
+  function mapError(cause, path, mismatch) {
+    if (cause.name === 'NotFoundError') return error('ENOENT', path);
+    if (cause.name === 'TypeMismatchError') return error(mismatch, path);
+    if (cause.name === 'NotAllowedError' || cause.name === 'SecurityError') {
+      return Object.assign(new Error(`Browser blocked access to ${path}. Check folder permissions and browser restrictions.`), { code: 'EACCES', cause });
+    }
+    return cause;
+  }
   function parts(path) {
     if (typeof path !== 'string') throw error('ENOENT', String(path));
     const result = [];
@@ -17,7 +25,7 @@ export function nativeFS(root) {
   async function directory(path, create = false) {
     let handle = root;
     try { for (const part of parts(path)) handle = await handle.getDirectoryHandle(part, { create }); }
-    catch (e) { throw error(e.name === 'TypeMismatchError' ? 'ENOTDIR' : e.name === 'NotAllowedError' ? 'EACCES' : 'ENOENT', path); }
+    catch (e) { throw mapError(e, path, 'ENOTDIR'); }
     return handle;
   }
   async function parent(path) {
@@ -28,7 +36,7 @@ export function nativeFS(root) {
   async function file(path, create = false) {
     const [dir, name] = await parent(path);
     try { return await dir.getFileHandle(name, { create }); }
-    catch (e) { throw error(e.name === 'TypeMismatchError' ? 'EISDIR' : e.name === 'NotAllowedError' ? 'EACCES' : 'ENOENT', path); }
+    catch (e) { throw mapError(e, path, 'EISDIR'); }
   }
   async function stat(path) {
     try {
@@ -54,8 +62,8 @@ export function nativeFS(root) {
     async mkdir(path) {
       const [dir, name] = await parent(path);
       try { await dir.getDirectoryHandle(name); throw error('EEXIST', path); }
-      catch (e) { if (e.code === 'EEXIST') throw e; if (e.name === 'TypeMismatchError') throw error('EEXIST', path); if (e.name !== 'NotFoundError') throw e; }
-      await dir.getDirectoryHandle(name, { create: true });
+      catch (e) { if (e.code === 'EEXIST') throw e; if (e.name === 'TypeMismatchError') throw error('EEXIST', path); if (e.name !== 'NotFoundError') throw mapError(e, path, 'EEXIST'); }
+      try { await dir.getDirectoryHandle(name, { create: true }); } catch (e) { throw mapError(e, path, 'EEXIST'); }
     },
     async readdir(path) { const names = []; for await (const name of (await directory(path)).keys()) names.push(name); return names; },
     async unlink(path) { const [dir, name] = await parent(path); try { await dir.removeEntry(name); } catch (e) { throw error(e.name === 'NotFoundError' ? 'ENOENT' : 'EACCES', path); } },
