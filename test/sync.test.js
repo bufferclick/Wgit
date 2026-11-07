@@ -68,3 +68,69 @@ test('explicit GitHub conflict choice updates worktree and retains both parents'
   assert.equal(run(local, 'status', '--porcelain'), '');
   assert.equal(run(local, 'rev-list', '--parents', '-n', '1', 'HEAD').split(' ').length, 3);
 });
+
+test('wgit push stages the whole working tree, syncs existing history and pushes without force', async t => {
+  const { local, remote, opts, proxy } = await fixture(t);
+  const { prepareAutoPush, autoPush } = await import('../src/auto-push.js');
+  await fs.writeFile(path.join(local, '.gitignore'), 'secret.txt\n');
+  await fs.writeFile(path.join(local, 'secret.txt'), 'ignored\n');
+  await fs.writeFile(path.join(local, 'added.txt'), 'added\n');
+  await fs.rm(path.join(local, 'local-only.txt'));
+  const target = await prepareAutoPush(opts, 'main'); const log = [];
+  const result = await autoPush(opts, target, { name: 'Local', email: 'local@example.com' }, 'dummy', () => 'local', line => log.push(line), proxy);
+  assert.equal(result.synced, true); assert.ok(result.commit);
+  assert.match(log.join('\n'), /Staged[\s\S]*Created commit[\s\S]*syncing/);
+  assert.equal(run(local, 'status', '--porcelain'), '');
+  assert.equal(execFileSync('git', ['--git-dir', remote, 'show', 'main:added.txt'], { encoding:'utf8' }), 'added\n');
+  assert.equal(execFileSync('git', ['--git-dir', remote, 'show', 'main:remote-only.txt'], { encoding:'utf8' }), 'remote file\n');
+  assert.equal(execFileSync('git', ['--git-dir', remote, 'ls-tree', '-r', '--name-only', 'main'], { encoding:'utf8' }).includes('secret.txt'), false);
+  assert.equal(execFileSync('git', ['--git-dir', remote, 'ls-tree', '-r', '--name-only', 'main'], { encoding:'utf8' }).includes('local-only.txt'), false);
+});
+
+test('wgit push can create a differently named remote branch without changing the local branch upstream', async t => {
+  const { local, remote, opts, proxy } = await fixture(t);
+  const { prepareAutoPush, autoPush } = await import('../src/auto-push.js');
+  await fs.writeFile(path.join(local, 'new.txt'), 'new branch\n');
+  const target = await prepareAutoPush(opts, 'feature/new');
+  assert.equal(target.branch, 'main'); assert.equal(target.upstream, false);
+  const result = await autoPush(opts, target, { name:'Local', email:'local@example.com' }, 'dummy', () => { throw new Error('unexpected conflict'); }, () => {}, proxy);
+  assert.equal(result.synced, false);
+  assert.equal(execFileSync('git', ['--git-dir', remote, 'show', 'feature/new:new.txt'], { encoding:'utf8' }), 'new branch\n');
+  assert.equal(run(local, 'branch', '--show-current'), 'main');
+  assert.equal(await git.getConfig({ ...opts, path:'branch.main.remote' }), undefined);
+});
+
+test('cancelled conflict keeps the auto commit and does not update the remote', async t => {
+  const { local, remote, opts, proxy } = await fixture(t);
+  const { prepareAutoPush, autoPush } = await import('../src/auto-push.js');
+  const original = execFileSync('git', ['--git-dir', remote, 'rev-parse', 'main'], { encoding:'utf8' }).trim();
+  await fs.writeFile(path.join(local, 'new.txt'), 'kept\n');
+  const target = await prepareAutoPush(opts, 'main');
+  const result = await autoPush(opts, target, { name:'Local', email:'local@example.com' }, 'dummy', () => null, () => {}, proxy);
+  assert.equal(result.cancelled, true); assert.ok(result.commit); assert.equal(run(local, 'rev-parse', 'HEAD'), result.commit);
+  assert.equal(execFileSync('git', ['--git-dir', remote, 'rev-parse', 'main'], { encoding:'utf8' }).trim(), original);
+});
+
+
+test('wgit push syncs an existing differently named destination without switching local branches', async t => {
+  const { local, remote, opts, proxy } = await fixture(t);
+  const { prepareAutoPush, autoPush } = await import('../src/auto-push.js');
+  execFileSync('git', ['--git-dir', remote, 'update-ref', 'refs/heads/feature/new', 'refs/heads/main']);
+  await fs.writeFile(path.join(local, 'file.txt'), 'local data\n');
+  const result = await autoPush(opts, await prepareAutoPush(opts, 'feature/new'), { name:'Local', email:'local@example.com' }, 'dummy', () => 'local', () => {}, proxy);
+  assert.equal(result.synced, true);
+  assert.equal(execFileSync('git', ['--git-dir', remote, 'show', 'feature/new:remote-only.txt'], { encoding:'utf8' }), 'remote file\n');
+  assert.equal(execFileSync('git', ['--git-dir', remote, 'show', 'feature/new:file.txt'], { encoding:'utf8' }), 'local data\n');
+  assert.equal(run(local, 'branch', '--show-current'), 'main');
+  assert.equal(await git.getConfig({ ...opts, path:'branch.main.remote' }), undefined);
+});
+
+test('wgit push validates target and authentication before staging anything', async t => {
+  const { local, opts, proxy } = await fixture(t);
+  const { prepareAutoPush, autoPush } = await import('../src/auto-push.js');
+  await fs.writeFile(path.join(local, 'new.txt'), 'unstaged\n');
+  await assert.rejects(prepareAutoPush(opts, '../bad'), /valid branch/);
+  const result = await autoPush(opts, await prepareAutoPush(opts, 'main'), { name:'Local', email:'local@example.com' }, '', () => null, () => {}, proxy);
+  assert.equal(result.cancelled, true);
+  assert.match(run(local, 'status', '--porcelain'), /\?\? new.txt/);
+});

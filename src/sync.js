@@ -73,7 +73,7 @@ export async function syncBranch(opts, target, token, author, choose, proxy = `$
   if (!author?.name || !author?.email) throw new Error('Set your name and email in Settings before syncing.');
   const current = await git.resolveRef({ ...opts, ref: `refs/heads/${target.branch}` });
   const auth = `Basic ${btoa(`x-access-token:${token}`)}`;
-  const fetched = await git.fetch({ ...opts, http, url: target.url, remote: target.remote, ref: target.branch, remoteRef: target.branch, singleBranch: true, corsProxy: proxy, headers: { Authorization: auth } });
+  const fetched = await git.fetch({ ...opts, http, url: target.url, remote: target.remote, ref: target.branch, remoteRef: target.remoteBranch || target.branch, singleBranch: true, corsProxy: proxy, headers: { Authorization: auth } });
   const theirs = fetched.fetchHead;
   if (!theirs) throw new Error('The remote branch has no commits to sync.');
   const bases = await git.findMergeBase({ ...opts, oids: [current, theirs] });
@@ -99,7 +99,7 @@ export async function syncBranch(opts, target, token, author, choose, proxy = `$
   await clean(opts);
   await guardNewPaths(opts, oursFiles, merged);
   const tree = await writeTree(opts, merged);
-  const oid = bases[0] === current ? theirs : await git.commit({ ...opts, tree, parent: [current, theirs], noUpdateBranch: true, author, message: `Merge ${target.remote}/${target.branch} into ${target.branch}` });
+  const oid = bases[0] === current ? theirs : await git.commit({ ...opts, tree, parent: [current, theirs], noUpdateBranch: true, author, message: `Merge ${target.remote}/${target.remoteBranch || target.branch} into ${target.branch}` });
   // Checkout first without moving HEAD, protecting untracked/ignored files; only
   // advance the branch after the checkout succeeds. No forced checkout or push.
   await git.checkout({ ...opts, ref: oid, noUpdateHead: true, dryRun: true });
