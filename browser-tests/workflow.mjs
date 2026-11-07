@@ -26,7 +26,7 @@ const errors = [];
 page.on('pageerror', error => errors.push(error.message));
 try {
   await page.goto(process.env.WGit_URL || 'http://localhost:4173/');
-  assert.match(await page.locator('.version-badge').textContent(), /v0\.0\.4/);
+  assert.match(await page.locator('.version-badge').textContent(), /v0\.0\.5/);
   assert.match(await page.locator('.about').textContent(), /Web-Git/);
   // Use a real browser filesystem handle from OPFS in place of the interactive
   // directory picker. This exercises nativeFS and browser Git, not Node globals.
@@ -63,6 +63,9 @@ try {
   await command('git add .', /Staged 2 files/);
   await command('git commit -m "First commit"', /First commit/);
   await command('git status', /working tree clean/);
+  await command('git ls-files', /README\.md[\s\S]*game\.wasm/);
+  await command('git config --get user.name', /^Buffer$/);
+  await command('git log --oneline -n 1', /First commit/);
   await command('git branch -M main', /Already on branch main/);
   assert.ok(!(await page.locator('#terminal-output').textContent()).includes('Created branch -M'));
   // Run real Git smart HTTP against a local bare repo while substituting only
@@ -135,7 +138,7 @@ try {
   await command('git log', /First commit/);
   await command('git branch feature', /Created branch feature/);
   await command('git switch feature', /Switched to branch/);
-  await command('git --version', /Wgit v0\.0\.4/);
+  await command('git --version', /Wgit v0\.0\.5/);
 
   // A real pointer drag selects terminal output, copies it and leaves it selected.
   const versionLine = page.locator('#terminal-output .output-line').last();
@@ -170,10 +173,30 @@ try {
   await page.locator('#try-demo').click();
   await page.waitForFunction(() => document.querySelector('#side-folder').textContent === 'demo-project');
   await command('git init', /Initialized empty Git repository/);
-  await command('git add .', /Staged 1 file/);
-  await command('git commit -m "Demo commit"', /Demo commit/);
+  await command('git status --short', /\?\? README\.md/);
+  await command('git remote add origin https://github.com/acme/project.git', /Added remote origin/);
+  await input.fill('wgit push demo-shortcut'); await input.press('Enter');
+  await page.locator('#push-dialog').waitFor({ state: 'visible' });
+  await page.locator('#github-token').fill('dummy-test-token');
+  await page.locator('#push-form button[type=submit]').click();
+  await page.waitForFunction(() => !document.querySelector('#command-input').disabled);
+  assert.match(await page.locator('#terminal-output .output-line').last().textContent(), /Pushed main.*demo-shortcut/);
+  assert.equal(execFileSync('git', ['--git-dir', remoteDir, 'show', 'demo-shortcut:README.md'], { encoding: 'utf8' }), '# My project\n\nHello from Wgit!\n');
+  // The shortcut also handles an existing unrelated branch and prompts for conflicts.
+  await input.fill('wgit push main'); await input.press('Enter');
+  await page.locator('#push-dialog').waitFor({ state: 'visible' });
+  await page.locator('#github-token').fill('dummy-test-token');
+  await page.locator('#push-form button[type=submit]').click();
+  await page.locator('#conflict-dialog').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#conflict-path').textContent(), 'README.md');
+  await page.locator('#keep-local').click();
+  await page.waitForFunction(() => !document.querySelector('#command-input').disabled);
+  assert.match(await page.locator('#terminal-output .output-line').last().textContent(), /branch main after syncing/);
+  assert.equal(execFileSync('git', ['--git-dir', remoteDir, 'show', 'main:README.md'], { encoding: 'utf8' }), '# My project\n\nHello from Wgit!\n');
+  assert.equal(execFileSync('git', ['--git-dir', remoteDir, 'show', 'main:remote-only.txt'], { encoding: 'utf8' }), 'Remote data\n');
   await command('git log', /Author: Buffer <bufferclick@github.com>/);
   await command('git status', /working tree clean/);
+  await command('git switch -c another', /Switched to new branch/);
   assert.deepEqual(errors, []);
   console.log('Browser workflow and clipboard checks passed.');
 } finally { await browser.close(); rmSync(gitRoot, { recursive: true, force: true }); }

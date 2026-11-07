@@ -54,11 +54,11 @@ export async function preparePush(opts, args) {
 export async function pushBranch(opts, target, token, proxy = `${location.origin}/api/git`) {
   // The secret is held only for this request, never in Git config or terminal output.
   const authorization = `Basic ${btoa(`x-access-token:${token}`)}`;
-  await git.push({ ...opts, http, url: target.url, remote: target.remote, ref: target.branch, remoteRef: target.branch, corsProxy: proxy, headers: { Authorization: authorization } });
+  await git.push({ ...opts, http, url: target.url, remote: target.remote, ref: target.branch, remoteRef: target.remoteBranch || target.branch, corsProxy: proxy, headers: { Authorization: authorization } });
   if (target.upstream) {
     try {
       await git.setConfig({ ...opts, path: `branch.${target.branch}.remote`, value: target.remote });
-      await git.setConfig({ ...opts, path: `branch.${target.branch}.merge`, value: `refs/heads/${target.branch}` });
+      await git.setConfig({ ...opts, path: `branch.${target.branch}.merge`, value: `refs/heads/${target.remoteBranch || target.branch}` });
     } catch { return { upstreamSaved: false }; }
   }
   return { upstreamSaved: true };

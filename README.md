@@ -17,6 +17,16 @@ Some Chromium browsers block creating `.git/hooks`. Wgit skips that optional dir
 
 Use the expand button in the terminal header for a larger terminal. Select terminal text and release to copy it; the terminal shows “Copied” when it succeeds. If clipboard access is blocked, use Ctrl+C or Cmd+C.
 
+## Quick push
+
+After initializing your repository and configuring `origin`, run:
+
+```sh
+wgit push main
+```
+
+This stages **all non-ignored changes in the repository**, including deletions and previously staged changes, creates a local commit named `Wgit: update project` when needed, and pushes the current local branch to the specified branch on `origin`. Review your files and `.gitignore` first: secrets that are not ignored can be included. It uses your saved commit identity and asks for GitHub authentication if none is saved. If the remote has conflicting history, it fetches and merges that history into the **current local branch**, asks you to choose a version of each conflicting file, then retries the push without force. Canceling a conflict leaves any automatic local commit in place. Network, permissions, protected-branch errors, unsafe file collisions, and other failures may still need your attention; inspect `git status` and GitHub before retrying. If you target a differently named branch, Wgit does not switch your local branch or change its upstream.
+
 ## Push to GitHub
 
 Create a GitHub repository, then in Wgit run:
@@ -30,7 +40,7 @@ Replace the URL and branch with your own. On push or sync, Wgit asks in a separa
 
 The relay is a Cloudflare Pages Function in `functions/`; deploy via Pages Git integration with build output `dist`. A static-only deployment cannot push without the relay. Cloudflare request size limits, GitHub file limits, branch protection, and repository permissions still apply. Local development and Vite preview run the same relay.
 
-Type `help` in the terminal for the supported commands. Wgit is not a full shell: only GitHub HTTPS push and the guided `git sync` are supported; standalone fetch, pull, clone, force push, SSH, arbitrary shell commands, symlinks, and many Git options are not currently supported. Switching branches is blocked when the working tree has changes. Keep backups of important projects.
+Type `help` in the terminal for the supported commands, including `git status --short`, `git log --oneline -n 5`, `git ls-files`, `git config --get user.name`, and `git switch -c <branch>`. Wgit is not a full shell: only GitHub HTTPS push and the guided `git sync` are supported; standalone fetch, pull, clone, force push, SSH, arbitrary shell commands, symlinks, and many Git options are not currently supported. Switching branches is blocked when the working tree has changes. Keep backups of important projects.
 
 Build the static site with `npm run build`; deploy the generated `dist` directory to a static host such as Cloudflare Pages.
 
