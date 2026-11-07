@@ -3,6 +3,7 @@ import LightningFS from '@isomorphic-git/lightning-fs';
 import { createIcons, GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, CircleDot, Terminal, FolderOpen, ShieldCheck, Trash2, Command, CheckCheck, Lightbulb, ArrowRight, Link, Folder, ArrowUpLeft, Heart } from 'lucide';
 const icons = { GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, CircleDot, Terminal, FolderOpen, ShieldCheck, Trash2, Command, CheckCheck, Lightbulb, ArrowRight, Link, Folder, ArrowUpLeft, Heart };
 import { nativeFS } from './native-fs.js';
+import { repositoryState, initRepository, incompleteMessage } from './repository.js';
 import './style.css';
 
 const icon = (name, cls = '') => `<i data-lucide="${name}" class="${cls}"></i>`;
@@ -36,13 +37,14 @@ const clean = path => { const result = []; for (const part of path.split('/')) {
 const resolve = path => clean(path?.startsWith('/') ? path : `${cwd}/${path || ''}`);
 const displayPath = path => '~/' + [rootName, ...path.split('/').slice(2)].filter(Boolean).join('/');
 function print(text, type = '') { const line = document.createElement('div'); line.className = `output-line ${type}`; line.textContent = text; output.append(line); body.scrollTop = body.scrollHeight; }
-async function findRepo() { if (!fs) return null; let path = cwd; while (path.startsWith('/workspace')) { try { if ((await pfs().stat(path + '/.git')).isDirectory()) return path; } catch {} if (path === '/workspace') break; path = path.substring(0, path.lastIndexOf('/')); } return null; }
+async function findRepo() { if (!fs) return null; let path = cwd; while (path === '/workspace' || path.startsWith('/workspace/')) { if (await repositoryState(fs, path) !== 'absent') return path; if (path === '/workspace') break; path = path.substring(0, path.lastIndexOf('/')); } return null; }
 async function refresh() {
   $('#prompt-path').textContent = fs ? displayPath(cwd) : '~';
   repo = await findRepo();
   $('#branch-label').textContent = '—';
   $('#status-label').textContent = fs ? 'No repository' : 'Not connected';
   if (repo) {
+    if (await repositoryState(fs, repo) !== 'ready') { $('#status-label').textContent = 'Incomplete repository'; return; }
     try { $('#branch-label').textContent = await git.currentBranch({ fs, dir: repo, fullname: false }) || 'Detached HEAD'; } catch {}
     try { const matrix = await git.statusMatrix({ fs, dir: repo }); const count = matrix.filter(([,h,w,s]) => h !== w || h !== s).length; $('#status-label').textContent = count ? `${count} changed ${count === 1 ? 'file' : 'files'}` : 'Clean'; } catch { $('#status-label').textContent = 'Repository open'; }
   }
@@ -81,8 +83,12 @@ async function command(line) {
   if (cmd !== 'git') return print(`Command not supported: ${cmd}. Type help to see available commands.`, 'error');
   const sub = args.shift();
   if (sub === '--version' || sub === 'version') return print('Wgit · powered by isomorphic-git');
-  if (sub === 'init') { if (args.length) throw new Error('Use cd to choose a folder before running git init.'); if (await findRepo() === cwd) throw new Error('This folder is already a Git repository.'); await git.init({ fs, dir: cwd, defaultBranch: 'main' }); return print(`Initialized empty Git repository in ${displayPath(cwd)}/.git/`, 'success'); }
+  if (sub === 'init') { if (args.length) throw new Error('Use cd to choose a folder before running git init.'); await initRepository(fs, cwd); return print(`Initialized empty Git repository in ${displayPath(cwd)}/.git/`, 'success'); }
   if (!repo) return print('Not a Git repository. Run git init to create one.', 'error');
+  const state = await repositoryState(fs, repo);
+  if (state === 'empty') throw new Error('The .git folder is empty from an incomplete initialization. Run git init to retry.');
+  if (state === 'unsupported') throw new Error('This folder uses a .git file; linked worktrees are not supported by Wgit.');
+  if (state !== 'ready') throw new Error(incompleteMessage);
   const opts = { fs, dir: repo };
   if (sub === 'status') {
     const branch = await git.currentBranch({ ...opts, fullname: false }); const matrix = await git.statusMatrix(opts); const staged = [], changes = [], untracked = [];
