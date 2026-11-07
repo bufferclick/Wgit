@@ -1,16 +1,18 @@
+import './polyfills.js';
 import * as git from 'isomorphic-git';
 import LightningFS from '@isomorphic-git/lightning-fs';
 import { createIcons, GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, CircleDot, Terminal, FolderOpen, ShieldCheck, Trash2, Command, CheckCheck, Lightbulb, ArrowRight, Link, Folder, ArrowUpLeft, Heart } from 'lucide';
 const icons = { GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, CircleDot, Terminal, FolderOpen, ShieldCheck, Trash2, Command, CheckCheck, Lightbulb, ArrowRight, Link, Folder, ArrowUpLeft, Heart };
 import { nativeFS } from './native-fs.js';
 import { repositoryState, initRepository, incompleteMessage } from './repository.js';
+import { version } from '../package.json';
 import './style.css';
 
 const icon = (name, cls = '') => `<i data-lucide="${name}" class="${cls}"></i>`;
 const esc = value => String(value).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 document.querySelector('#app').innerHTML = `
 <header class="topbar">
-  <div class="top-left"><a class="brand-mark" href="#" aria-label="Wgit home">${icon('git-branch')}</a><span class="top-divider"></span><span class="top-product">Wgit</span><span class="top-slash">/</span><span class="top-context">workspace</span></div>
+  <div class="top-left"><a class="brand-mark" href="#" aria-label="Wgit home">${icon('git-branch')}</a><span class="top-divider"></span><span class="top-product">Wgit <span class="version-badge">v${version}</span></span><span class="top-slash">/</span><span class="top-context">workspace</span></div>
   <div class="top-right"><span class="open-source"><span class="green-dot"></span> Open source &amp; free</span><a class="github-top" href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">${icon('github')} <span>View on GitHub</span> ${icon('arrow-up-right', 'external')}</a></div>
 </header>
 <div class="repo-head"><div class="repo-title"><div class="repo-icon">${icon('book-marked')}</div><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">bufferclick</a><span class="slash">/</span><strong>Wgit</strong><span class="public-pill">Public</span></div></div>
@@ -20,12 +22,12 @@ document.querySelector('#app').innerHTML = `
     <div class="intro"><div><div class="eyebrow"><span class="sparkle">✳</span> YOUR BROWSER-BASED GIT WORKSPACE</div><h1>Git, right where you are<span class="green-period">.</span></h1><p>Your projects. Your commands. No setup required.</p></div><div class="intro-art" aria-hidden="true"><span class="art-box">${icon('terminal')}</span><span class="art-line"></span><span class="art-box art-git">${icon('git-branch')}</span></div></div>
     <div class="workspace-heading"><div><h2>Workspace <span class="heading-badge">BETA</span></h2><p>Everything you need to get going.</p></div><span class="secure-label">${icon('shield-check')} Runs in your browser</span></div>
     <div class="panel folder-panel"><div class="folder-illustration">${icon('folder-open')}</div><div class="folder-copy"><div class="folder-title" id="folder-title">Open a project folder</div><div class="folder-description" id="folder-description">Choose a local folder to start using Git, right from your browser.</div></div><button class="button primary" id="open-folder">${icon('folder-open')} Open folder</button></div>
-    <div class="terminal panel"><div class="terminal-top"><div class="terminal-title">${icon('terminal')} <strong>Terminal</strong><span class="terminal-divider"></span><span>bash</span></div><div class="terminal-actions"><span id="terminal-state"><span class="status-dot"></span> Ready</span><button id="clear-terminal" class="icon-button" title="Clear terminal" aria-label="Clear terminal">${icon('trash-2')}</button></div></div><div class="terminal-body" id="terminal-body"><div class="terminal-welcome"><div><span class="welcome-green">➜</span> Welcome to Wgit <span class="welcome-muted">— Git without leaving your browser.</span></div><div class="terminal-hint">Open a folder to get started, or type <span>help</span> to see available commands.</div></div><div id="terminal-output" aria-live="polite"></div><form id="terminal-form" autocomplete="off"><label for="command-input" class="prompt"><span>➜</span> <span class="prompt-path" id="prompt-path">~</span></label><input id="command-input" aria-label="Terminal command" spellcheck="false" placeholder="Type a command..." /></form></div><div class="terminal-bottom"><span>${icon('command')} Command line</span><span>Type <kbd>help</kbd> for a list of commands</span></div></div>
+    <div class="terminal panel"><div class="terminal-top"><div class="terminal-title">${icon('terminal')} <strong>Terminal</strong><span class="terminal-divider"></span><span>bash</span></div><div class="terminal-actions"><span id="copy-state" role="status" aria-live="polite">Select text to copy</span><span id="terminal-state"><span class="status-dot"></span> Ready</span><button id="clear-terminal" class="icon-button" title="Clear terminal" aria-label="Clear terminal">${icon('trash-2')}</button></div></div><div class="terminal-body" id="terminal-body"><div class="terminal-welcome"><div><span class="welcome-green">➜</span> Welcome to Wgit <span class="welcome-muted">— Git without leaving your browser.</span></div><div class="terminal-hint">Open a folder to get started, or type <span>help</span> to see available commands.</div></div><div id="terminal-output" aria-live="polite"></div><form id="terminal-form" autocomplete="off"><label for="command-input" class="prompt"><span>➜</span> <span class="prompt-path" id="prompt-path">~</span></label><input id="command-input" aria-label="Terminal command" spellcheck="false" placeholder="Type a command..." /></form></div><div class="terminal-bottom"><span>${icon('command')} Command line</span><span>Type <kbd>help</kbd> for a list of commands</span></div></div>
     <div class="quick-heading"><div><h2>New around here?</h2><p>Get from zero to version control in a few steps.</p></div><span>THE BASICS</span></div>
     <div class="steps"><div class="step"><span class="step-num">01</span><div class="step-icon">${icon('folder-open')}</div><h3>Open your folder</h3><p>Choose a project folder from your computer.</p></div><div class="step"><span class="step-num">02</span><div class="step-icon">${icon('git-branch')}</div><h3>Initialize Git</h3><p>Run <code>git init</code> to create a new repository.</p></div><div class="step"><span class="step-num">03</span><div class="step-icon">${icon('check-check')}</div><h3>Make your first commit</h3><p>Stage your files and commit your changes.</p></div></div>
     <div class="tip">${icon('lightbulb')} <span><strong>Just looking around?</strong> Try a <button id="try-demo">demo workspace</button> first. No files on your computer will be changed.</span> ${icon('arrow-right', 'tip-arrow')}</div>
   </section>
-  <aside class="sidebar"><div class="about"><h2>About Wgit</h2><p>A lightweight Git workspace that lives in your browser. Built for the projects and ideas you want to keep moving.</p><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">${icon('link')} github.com/bufferclick/Wgit</a><div class="tags"><span>git</span><span>browser</span><span>open-source</span></div></div><div class="side-section"><h3>YOUR WORKSPACE</h3><div class="side-status"><div class="side-icon">${icon('folder')}</div><div><strong id="side-folder">No folder selected</strong><p id="side-detail">Open a folder to get started</p></div></div><div class="side-meta"><span>${icon('git-branch')} Branch</span><strong id="branch-label">—</strong></div><div class="side-meta"><span>${icon('circle-dot')} Status</span><strong id="status-label">Not connected</strong></div></div><div class="side-section commands"><div class="side-heading"><h3>QUICK COMMANDS</h3><span>Click to insert</span></div><button data-command="git init"><code>git init</code>${icon('arrow-up-left')}</button><button data-command="git status"><code>git status</code>${icon('arrow-up-left')}</button><button data-command="git add ."><code>git add .</code>${icon('arrow-up-left')}</button><button data-command="git commit -m &quot;First commit&quot;"><code>git commit -m "..."</code>${icon('arrow-up-left')}</button><button data-command="git log"><code>git log</code>${icon('arrow-up-left')}</button></div><div class="help-card"><div class="help-icon">${icon('heart')}</div><div><strong>Made for builders</strong><p>Wgit is open source and always will be.</p><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">View on GitHub ${icon('arrow-right')}</a></div></div></aside>
+  <aside class="sidebar"><div class="about"><h2>About Wgit</h2><p>Wgit means Web-Git: a lightweight Git workspace that lives in your browser. Built for the projects and ideas you want to keep moving.</p><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">${icon('link')} github.com/bufferclick/Wgit</a><div class="tags"><span>git</span><span>browser</span><span>open-source</span></div></div><div class="side-section"><h3>YOUR WORKSPACE</h3><div class="side-status"><div class="side-icon">${icon('folder')}</div><div><strong id="side-folder">No folder selected</strong><p id="side-detail">Open a folder to get started</p></div></div><div class="side-meta"><span>${icon('git-branch')} Branch</span><strong id="branch-label">—</strong></div><div class="side-meta"><span>${icon('circle-dot')} Status</span><strong id="status-label">Not connected</strong></div></div><div class="side-section commands"><div class="side-heading"><h3>QUICK COMMANDS</h3><span>Click to insert</span></div><button data-command="git init"><code>git init</code>${icon('arrow-up-left')}</button><button data-command="git status"><code>git status</code>${icon('arrow-up-left')}</button><button data-command="git add ."><code>git add .</code>${icon('arrow-up-left')}</button><button data-command="git commit -m &quot;First commit&quot;"><code>git commit -m "..."</code>${icon('arrow-up-left')}</button><button data-command="git log"><code>git log</code>${icon('arrow-up-left')}</button></div><div class="help-card"><div class="help-icon">${icon('heart')}</div><div><strong>Made for builders</strong><p>Wgit is open source and always will be.</p><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">View on GitHub ${icon('arrow-right')}</a></div></div></aside>
 </main><footer><div><span class="footer-logo">${icon('git-branch')}</span> <strong>Wgit</strong><span>© 2026 Wgit contributors</span></div><div><span>Built for the open web</span><span class="footer-dot">·</span><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">GitHub ${icon('arrow-up-right')}</a></div></footer>`;
 createIcons({ icons });
 
@@ -68,7 +70,40 @@ $('#try-demo').addEventListener('click', async () => {
 });
 $('#clear-terminal').addEventListener('click', () => { output.replaceChildren(); input.focus(); });
 document.querySelectorAll('[data-command]').forEach(button => button.addEventListener('click', () => { input.value = button.dataset.command; input.focus(); }));
-$('#terminal-body').addEventListener('click', () => input.focus());
+// Preserve selected text: focusing the input on every click used to clear it.
+body.addEventListener('click', event => {
+  const selection = window.getSelection();
+  if (event.target !== input && (!selection || selection.isCollapsed)) input.focus();
+});
+const copyState = $('#copy-state');
+let copyTimer;
+function showCopyState(message, isError = false) {
+  clearTimeout(copyTimer);
+  copyState.textContent = message;
+  copyState.classList.toggle('copy-error', isError);
+  copyState.classList.toggle('copied', !isError);
+  copyTimer = setTimeout(() => { copyState.textContent = 'Select text to copy'; copyState.classList.remove('copied', 'copy-error'); }, 4000);
+}
+body.addEventListener('pointerup', async () => {
+  let text = '';
+  if (document.activeElement === input && input.selectionStart !== input.selectionEnd) {
+    text = input.value.slice(input.selectionStart, input.selectionEnd);
+  } else {
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed && body.contains(selection.anchorNode) && body.contains(selection.focusNode)) text = selection.toString();
+  }
+  if (!text) return;
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+    await navigator.clipboard.writeText(text);
+    showCopyState('Copied');
+  } catch {
+    // Older browsers can copy the current selection during the same gesture.
+    let copied = false;
+    try { copied = document.execCommand('copy'); } catch { /* Clipboard access was denied. */ }
+    showCopyState(copied ? 'Copied' : 'Copy blocked — use Ctrl/Cmd+C', !copied);
+  }
+});
 input.addEventListener('keydown', e => { if (e.key === 'ArrowUp') { e.preventDefault(); if (historyIndex > 0) input.value = history[--historyIndex]; } if (e.key === 'ArrowDown') { e.preventDefault(); if (historyIndex < history.length) historyIndex++; input.value = history[historyIndex] || ''; } });
 function tokenize(str) { const tokens = []; const re = /(?:[^\s"']+|"[^"]*"|'[^']*')+/g; for (const match of str.matchAll(re)) tokens.push(match[0].replace(/"([^"]*)"|'([^']*)'/g, (_, a, b) => a ?? b)); return tokens; }
 const help = `Available commands\n  pwd                     Show the current folder\n  ls                      List files and folders\n  cd <folder>             Change folder (cd .. to go back)\n  clear                   Clear terminal output\n  git init                Initialize a repository\n  git status              Show changed files\n  git add <file|.>        Stage files\n  git commit -m "message"  Commit staged changes\n  git log                 Show commit history\n  git branch [name]       List or create branches\n  git switch <branch>     Switch branches\n  git config user.name <name>\n  git config user.email <email>\n\nWgit runs Git in your browser. Remote operations and shell commands are not supported yet.`;
@@ -82,7 +117,7 @@ async function command(line) {
   if (cmd === 'cd') { const target = args[0] ? resolve(args[0]) : '/workspace'; if ((target !== '/workspace' && !target.startsWith('/workspace/')) || !(await pfs().stat(target)).isDirectory()) throw new Error('Not a directory'); cwd = target; return; }
   if (cmd !== 'git') return print(`Command not supported: ${cmd}. Type help to see available commands.`, 'error');
   const sub = args.shift();
-  if (sub === '--version' || sub === 'version') return print('Wgit · powered by isomorphic-git');
+  if (sub === '--version' || sub === 'version') return print(`Wgit v${version} · powered by isomorphic-git`);
   if (sub === 'init') { if (args.length) throw new Error('Use cd to choose a folder before running git init.'); await initRepository(fs, cwd); return print(`Initialized empty Git repository in ${displayPath(cwd)}/.git/`, 'success'); }
   if (!repo) return print('Not a Git repository. Run git init to create one.', 'error');
   const state = await repositoryState(fs, repo);
