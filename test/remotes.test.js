@@ -39,10 +39,14 @@ test('relay accepts only same-origin GitHub receive-pack and does not follow red
   const valid = new Request('https://wgit.example/api/git/github.com/acme/repo.git/info/refs?service=git-receive-pack', { headers: { origin: 'https://wgit.example', authorization: 'Basic abc', cookie: 'session=secret' } });
   const response = await onRequest({ request: valid }, mockFetch);
   assert.equal(response.status, 200); assert.equal(await response.text(), 'ok'); assert.equal(response.headers.get('set-cookie'), null);
-  for (const url of ['https://wgit.example/api/git/evil.com/acme/repo.git/info/refs?service=git-receive-pack', 'https://wgit.example/api/git/github.com/acme/repo.git/info/refs?service=git-upload-pack', 'https://wgit.example/api/git/github.com/acme/repo.git/other']) assert.notEqual((await onRequest({ request: new Request(url) }, mockFetch)).status, 200);
+  for (const url of ['https://wgit.example/api/git/evil.com/acme/repo.git/info/refs?service=git-receive-pack', 'https://wgit.example/api/git/github.com/acme/repo.git/info/refs?service=bad-service', 'https://wgit.example/api/git/github.com/acme/repo.git/other']) assert.notEqual((await onRequest({ request: new Request(url) }, mockFetch)).status, 200);
   const crossOrigin = new Request(valid.url, { headers: { origin: 'https://evil.example' } });
   assert.equal((await onRequest({ request: crossOrigin }, mockFetch)).status, 403);
   assert.equal(requestCount, 1);
+  const upload = new Request('https://wgit.example/api/git/github.com/acme/repo.git/info/refs?service=git-upload-pack');
+  assert.equal((await onRequest({ request: upload }, async (url) => { assert.match(url, /service=git-upload-pack/); return new Response('ok'); })).status, 200);
+  const rejectedPost = new Request('https://wgit.example/api/git/github.com/acme/repo.git/git-upload-pack', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: 'x' });
+  assert.equal((await onRequest({ request: rejectedPost }, mockFetch)).status, 415);
   const redirected = await onRequest({ request: valid }, async () => new Response(null, { status: 302, headers: { location: 'https://evil.example' } }));
   assert.equal(redirected.status, 502); assert.equal(redirected.headers.get('location'), null);
 });

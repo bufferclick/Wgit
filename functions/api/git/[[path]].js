@@ -6,12 +6,12 @@ export async function onRequest({ request }, upstreamFetch = fetch) {
   if ((origin && origin !== incoming.origin) || (site && !['same-origin', 'none'].includes(site))) {
     return new Response('Cross-origin requests are not allowed.', { status: 403 });
   }
-  const match = incoming.pathname.match(/^\/api\/git\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+\.git)\/(info\/refs|git-receive-pack)$/);
+  const match = incoming.pathname.match(/^\/api\/git\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+\.git)\/(info\/refs|git-receive-pack|git-upload-pack)$/);
   if (!match || ['.', '..'].includes(match[1]) || ['.git', '..git', '...git'].includes(match[2])) return new Response('Unsupported Git endpoint.', { status: 404 });
-  const discovery = request.method === 'GET' && match[3] === 'info/refs' && incoming.search === '?service=git-receive-pack';
-  const receive = request.method === 'POST' && match[3] === 'git-receive-pack' && !incoming.search;
+  const discovery = request.method === 'GET' && match[3] === 'info/refs' && ['?service=git-receive-pack', '?service=git-upload-pack'].includes(incoming.search);
+  const receive = request.method === 'POST' && ['git-receive-pack', 'git-upload-pack'].includes(match[3]) && !incoming.search;
   if (!discovery && !receive) return new Response('Unsupported Git operation.', { status: 405 });
-  if (receive && request.headers.get('content-type') !== 'application/x-git-receive-pack-request') return new Response('Invalid Git content type.', { status: 415 });
+  if (receive && request.headers.get('content-type') !== `application/x-${match[3]}-request`) return new Response('Invalid Git content type.', { status: 415 });
   const headers = new Headers();
   for (const name of ['authorization', 'accept', 'content-type', 'git-protocol']) {
     const value = request.headers.get(name);

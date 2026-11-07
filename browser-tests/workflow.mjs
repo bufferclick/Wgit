@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -13,6 +13,11 @@ const gitRoot = mkdtempSync(join(tmpdir(), 'wgit-http-test-'));
 mkdirSync(join(gitRoot, 'acme'));
 const remoteDir = join(gitRoot, 'acme', 'project.git');
 execFileSync('git', ['init', '--bare', '--initial-branch=main', remoteDir]);
+const seed = join(gitRoot, 'seed'); mkdirSync(seed);
+const run = (...args) => execFileSync('git', ['-C', seed, ...args], { stdio: 'ignore' });
+run('init', '-b', 'main'); run('config', 'user.name', 'Remote'); run('config', 'user.email', 'remote@example.com');
+writeFileSync(join(seed, 'README.md'), 'Remote README\n'); writeFileSync(join(seed, 'remote-only.txt'), 'Remote data\n');
+run('add', '.'); run('commit', '-m', 'Remote initial'); run('push', remoteDir, 'main');
 const browser = await chromium.launch({ executablePath, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
 const context = await browser.newContext();
 await context.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -21,7 +26,7 @@ const errors = [];
 page.on('pageerror', error => errors.push(error.message));
 try {
   await page.goto(process.env.WGit_URL || 'http://localhost:4173/');
-  assert.match(await page.locator('.version-badge').textContent(), /v0\.0\.3/);
+  assert.match(await page.locator('.version-badge').textContent(), /v0\.0\.4/);
   assert.match(await page.locator('.about').textContent(), /Web-Git/);
   // Use a real browser filesystem handle from OPFS in place of the interactive
   // directory picker. This exercises nativeFS and browser Git, not Node globals.
@@ -48,11 +53,18 @@ try {
   }
   await command('git init', /Initialized empty Git repository/);
   await command('git status', /README\.md[\s\S]*game\.wasm/);
-  await command('git config user.name "Buffer"', /Set user.name/);
-  await command('git config user.email "bufferclick@github.com"', /Set user.email/);
+  await page.locator('#open-settings').click();
+  await page.locator('#settings-name').fill('Buffer'); await page.locator('#settings-email').fill('bufferclick@github.com');
+  await page.locator('#settings-form button[type=submit]').click();
+  await page.locator('#open-settings').click();
+  assert.equal(await page.locator('#settings-name').inputValue(), 'Buffer');
+  assert.equal(await page.locator('#settings-email').inputValue(), 'bufferclick@github.com');
+  await page.locator('#cancel-settings').click();
   await command('git add .', /Staged 2 files/);
   await command('git commit -m "First commit"', /First commit/);
   await command('git status', /working tree clean/);
+  await command('git branch -M main', /Already on branch main/);
+  assert.ok(!(await page.locator('#terminal-output').textContent()).includes('Created branch -M'));
   // Run real Git smart HTTP against a local bare repo while substituting only
   // the GitHub network endpoint. Authentication is a harmless test value.
   await page.route('**/api/git/github.com/acme/project.git/**', async route => {
@@ -77,24 +89,53 @@ try {
   await page.locator('#github-token').fill('dummy-test-token');
   await page.locator('#push-form button[type=submit]').click();
   await page.waitForFunction(() => !document.querySelector('#command-input').disabled);
-  assert.match(await page.locator('#terminal-output .output-line').last().textContent(), /Pushed main.*set upstream/);
-  assert.equal(execFileSync('git', ['--git-dir', remoteDir, 'log', '-1', '--format=%s', 'main'], { encoding: 'utf8' }).trim(), 'First commit');
+  assert.match(await page.locator('#terminal-output .output-line').last().textContent(), /Push rejected.*git sync origin main/);
+  assert.equal(await page.locator('#github-token').inputValue(), '');
+  await page.locator('#open-settings').click();
+  await page.locator('#settings-token').fill('dummy-test-token');
+  assert.equal(await page.locator('#settings-token').getAttribute('type'), 'password');
+  await page.locator('#settings-form button[type=submit]').click();
+  await page.locator('#open-settings').click();
+  assert.equal(await page.locator('#settings-token').inputValue(), '');
+  assert.match(await page.locator('#token-status').textContent(), /token is saved/);
+  await page.locator('#cancel-settings').click();
+  const secondPage = await context.newPage();
+  await secondPage.goto(process.env.WGit_URL || 'http://localhost:4173/');
+  await secondPage.locator('#open-settings').click();
+  assert.equal(await secondPage.locator('#settings-name').inputValue(), 'Buffer');
+  assert.equal(await secondPage.locator('#settings-token').inputValue(), '');
+  assert.match(await secondPage.locator('#token-status').textContent(), /token is saved/);
+  await secondPage.close();
+  await input.fill('git sync origin main'); await input.press('Enter');
+  await page.locator('#conflict-dialog').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#conflict-path').textContent(), 'README.md');
+  await page.locator('#keep-local').click();
+  await page.waitForFunction(() => !document.querySelector('#command-input').disabled);
+  assert.match(await page.locator('#terminal-output .output-line').last().textContent(), /Synced origin\/main/);
+  await command('git status', /working tree clean/);
+  await command('git push -u origin main', /Pushed main.*set upstream/);
+  assert.equal(execFileSync('git', ['--git-dir', remoteDir, 'show', 'main:README.md'], { encoding: 'utf8' }), 'Hello from Web-Git\n');
+  assert.equal(execFileSync('git', ['--git-dir', remoteDir, 'show', 'main:remote-only.txt'], { encoding: 'utf8' }), 'Remote data\n');
   assert.ok(!(await page.locator('#terminal-output').textContent()).includes('dummy-test-token'));
   const storedConfig = await page.evaluate(async () => { const root = await navigator.storage.getDirectory(), project = await root.getDirectoryHandle('project'), gitdir = await project.getDirectoryHandle('.git'), config = await gitdir.getFileHandle('config'); return (await config.getFile()).text(); });
   assert.ok(!storedConfig.includes('dummy-test-token'));
   assert.match(storedConfig, /remote = origin/);
   assert.deepEqual(execFileSync('git', ['--git-dir', remoteDir, 'show', 'main:game.wasm']), Buffer.from([0, 97, 115, 109, 0, 1, 2]));
-  assert.equal(await page.locator('#github-token').inputValue(), '');
+  await page.locator('#open-settings').click(); await page.locator('#clear-saved-token').click(); await page.locator('#cancel-settings').click();
   await input.fill('git push'); await input.press('Enter');
   await page.locator('#push-dialog').waitFor({ state: 'visible' });
   await page.locator('#cancel-push').click();
   await page.waitForFunction(() => !document.querySelector('#command-input').disabled);
   assert.match(await page.locator('#terminal-output .output-line').last().textContent(), /Push cancelled/);
   assert.equal(await page.locator('#github-token').inputValue(), '');
+  await page.locator('#fullscreen-terminal').click();
+  assert.equal(await page.locator('.terminal.expanded').count(), 1);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.terminal.expanded').count(), 0);
   await command('git log', /First commit/);
   await command('git branch feature', /Created branch feature/);
   await command('git switch feature', /Switched to branch/);
-  await command('git --version', /Wgit v0\.0\.3/);
+  await command('git --version', /Wgit v0\.0\.4/);
 
   // A real pointer drag selects terminal output, copies it and leaves it selected.
   const versionLine = page.locator('#terminal-output .output-line').last();
@@ -129,10 +170,9 @@ try {
   await page.locator('#try-demo').click();
   await page.waitForFunction(() => document.querySelector('#side-folder').textContent === 'demo-project');
   await command('git init', /Initialized empty Git repository/);
-  await command('git config user.name "Demo"', /Set user.name/);
-  await command('git config user.email "demo@example.com"', /Set user.email/);
   await command('git add .', /Staged 1 file/);
   await command('git commit -m "Demo commit"', /Demo commit/);
+  await command('git log', /Author: Buffer <bufferclick@github.com>/);
   await command('git status', /working tree clean/);
   assert.deepEqual(errors, []);
   console.log('Browser workflow and clipboard checks passed.');
