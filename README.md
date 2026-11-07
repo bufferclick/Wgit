@@ -17,7 +17,20 @@ Some Chromium browsers block creating `.git/hooks`. Wgit skips that optional dir
 
 Select terminal text and release to copy it; the terminal shows “Copied” when it succeeds. If clipboard access is blocked, use Ctrl+C or Cmd+C.
 
-Type `help` in the terminal for the supported commands. Wgit is not a full shell: network/remote operations, arbitrary shell commands, symlinks, and many Git options are not currently supported. Switching branches is blocked when the working tree has changes. Keep backups of important projects.
+## Push to GitHub
+
+Create a GitHub repository, then in Wgit run:
+
+```sh
+git remote add origin https://github.com/OWNER/REPOSITORY.git
+git push -u origin main
+```
+
+Replace the URL and branch with your own. On push, Wgit asks in a separate password field for a GitHub fine-grained personal access token with access to that repository and **Contents: read and write** permission (some repositories may require additional permissions or organization approval). Do not put a token in a terminal command or URL. Wgit keeps it only for that push, sends it through the site's GitHub-only relay to GitHub, and does not save it in the repository or browser storage. Only use a Wgit deployment you trust: its operator handles the proxied requests. `git remote -v`, `git remote get-url`, `git remote set-url` and `git remote remove` are also supported. After `-u`, plain `git push` uses the configured upstream. Pushes are not forced; if the remote has different history, reconcile it using another Git client.
+
+The relay is a Cloudflare Pages Function in `functions/`; deploy via Pages Git integration with build output `dist`. A static-only deployment cannot push without the relay. Cloudflare request size limits, GitHub file limits, branch protection, and repository permissions still apply. Local development and Vite preview run the same relay.
+
+Type `help` in the terminal for the supported commands. Wgit is not a full shell: only GitHub HTTPS pushes are supported; fetch, pull, clone, force push, SSH, arbitrary shell commands, symlinks, and many Git options are not currently supported. Switching branches is blocked when the working tree has changes. Keep backups of important projects.
 
 Build the static site with `npm run build`; deploy the generated `dist` directory to a static host such as Cloudflare Pages.
 

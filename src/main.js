@@ -5,6 +5,7 @@ import { createIcons, GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, Circ
 const icons = { GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, CircleDot, Terminal, FolderOpen, ShieldCheck, Trash2, Command, CheckCheck, Lightbulb, ArrowRight, Link, Folder, ArrowUpLeft, Heart };
 import { nativeFS } from './native-fs.js';
 import { repositoryState, initRepository, incompleteMessage } from './repository.js';
+import { remoteCommand, preparePush, pushBranch } from './remotes.js';
 import { version } from '../package.json';
 import './style.css';
 
@@ -27,8 +28,8 @@ document.querySelector('#app').innerHTML = `
     <div class="steps"><div class="step"><span class="step-num">01</span><div class="step-icon">${icon('folder-open')}</div><h3>Open your folder</h3><p>Choose a project folder from your computer.</p></div><div class="step"><span class="step-num">02</span><div class="step-icon">${icon('git-branch')}</div><h3>Initialize Git</h3><p>Run <code>git init</code> to create a new repository.</p></div><div class="step"><span class="step-num">03</span><div class="step-icon">${icon('check-check')}</div><h3>Make your first commit</h3><p>Stage your files and commit your changes.</p></div></div>
     <div class="tip">${icon('lightbulb')} <span><strong>Just looking around?</strong> Try a <button id="try-demo">demo workspace</button> first. No files on your computer will be changed.</span> ${icon('arrow-right', 'tip-arrow')}</div>
   </section>
-  <aside class="sidebar"><div class="about"><h2>About Wgit</h2><p>Wgit means Web-Git: a lightweight Git workspace that lives in your browser. Built for the projects and ideas you want to keep moving.</p><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">${icon('link')} github.com/bufferclick/Wgit</a><div class="tags"><span>git</span><span>browser</span><span>open-source</span></div></div><div class="side-section"><h3>YOUR WORKSPACE</h3><div class="side-status"><div class="side-icon">${icon('folder')}</div><div><strong id="side-folder">No folder selected</strong><p id="side-detail">Open a folder to get started</p></div></div><div class="side-meta"><span>${icon('git-branch')} Branch</span><strong id="branch-label">—</strong></div><div class="side-meta"><span>${icon('circle-dot')} Status</span><strong id="status-label">Not connected</strong></div></div><div class="side-section commands"><div class="side-heading"><h3>QUICK COMMANDS</h3><span>Click to insert</span></div><button data-command="git init"><code>git init</code>${icon('arrow-up-left')}</button><button data-command="git status"><code>git status</code>${icon('arrow-up-left')}</button><button data-command="git add ."><code>git add .</code>${icon('arrow-up-left')}</button><button data-command="git commit -m &quot;First commit&quot;"><code>git commit -m "..."</code>${icon('arrow-up-left')}</button><button data-command="git log"><code>git log</code>${icon('arrow-up-left')}</button></div><div class="help-card"><div class="help-icon">${icon('heart')}</div><div><strong>Made for builders</strong><p>Wgit is open source and always will be.</p><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">View on GitHub ${icon('arrow-right')}</a></div></div></aside>
-</main><footer><div><span class="footer-logo">${icon('git-branch')}</span> <strong>Wgit</strong><span>© 2026 Wgit contributors</span></div><div><span>Built for the open web</span><span class="footer-dot">·</span><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">GitHub ${icon('arrow-up-right')}</a></div></footer>`;
+  <aside class="sidebar"><div class="about"><h2>About Wgit</h2><p>Wgit means Web-Git: a lightweight Git workspace that lives in your browser. Built for the projects and ideas you want to keep moving.</p><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">${icon('link')} github.com/bufferclick/Wgit</a><div class="tags"><span>git</span><span>browser</span><span>open-source</span></div></div><div class="side-section"><h3>YOUR WORKSPACE</h3><div class="side-status"><div class="side-icon">${icon('folder')}</div><div><strong id="side-folder">No folder selected</strong><p id="side-detail">Open a folder to get started</p></div></div><div class="side-meta"><span>${icon('git-branch')} Branch</span><strong id="branch-label">—</strong></div><div class="side-meta"><span>${icon('circle-dot')} Status</span><strong id="status-label">Not connected</strong></div></div><div class="side-section commands"><div class="side-heading"><h3>QUICK COMMANDS</h3><span>Click to insert</span></div><button data-command="git init"><code>git init</code>${icon('arrow-up-left')}</button><button data-command="git status"><code>git status</code>${icon('arrow-up-left')}</button><button data-command="git add ."><code>git add .</code>${icon('arrow-up-left')}</button><button data-command="git commit -m &quot;First commit&quot;"><code>git commit -m "..."</code>${icon('arrow-up-left')}</button><button data-command="git log"><code>git log</code>${icon('arrow-up-left')}</button><button data-command="git remote -v"><code>git remote -v</code>${icon('arrow-up-left')}</button><button data-command="git push -u origin main"><code>git push -u origin main</code>${icon('arrow-up-left')}</button></div><div class="help-card"><div class="help-icon">${icon('heart')}</div><div><strong>Made for builders</strong><p>Wgit is open source and always will be.</p><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">View on GitHub ${icon('arrow-right')}</a></div></div></aside>
+</main><dialog id="push-dialog" aria-labelledby="push-title"><form id="push-form"><h2 id="push-title">Connect to GitHub</h2><p>Push <strong id="push-branch"></strong> to <strong id="push-target"></strong>.</p><label for="github-token">GitHub personal access token</label><input id="github-token" type="password" required autocomplete="off" spellcheck="false" placeholder="Paste token here" /><p class="dialog-note">Use a fine-grained token with repository Contents read and write access. It is sent through this site's GitHub-only relay to GitHub, and is not saved by Wgit. Never enter it in the terminal.</p><a href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens" target="_blank" rel="noopener noreferrer">How to create a token ↗</a><div class="dialog-actions"><button type="button" id="cancel-push" class="button">Cancel</button><button type="submit" class="button primary">Push to GitHub</button></div></form></dialog><footer><div><span class="footer-logo">${icon('git-branch')}</span> <strong>Wgit</strong><span>© 2026 Wgit contributors</span></div><div><span>Built for the open web</span><span class="footer-dot">·</span><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">GitHub ${icon('arrow-up-right')}</a></div></footer>`;
 createIcons({ icons });
 
 const $ = s => document.querySelector(s);
@@ -60,11 +61,13 @@ async function setWorkspace(newFs, name, demo = false) {
   print(`Opened ${demo ? 'demo workspace' : 'folder'}: ${name}`, 'success'); await refresh(); input.focus();
 }
 $('#open-folder').addEventListener('click', async () => {
+  if (busy) return;
   if (!window.showDirectoryPicker) { print('Folder access is not supported in this browser. Try a Chromium-based browser, or use the demo workspace.', 'error'); input.focus(); return; }
   try { const handle = await window.showDirectoryPicker({ mode: 'readwrite' }); await setWorkspace(nativeFS(handle), handle.name); }
   catch (e) { if (e.name !== 'AbortError') print(`Could not open folder: ${e.message}`, 'error'); }
 });
 $('#try-demo').addEventListener('click', async () => {
+  if (busy) return;
   try { const demoFS = new LightningFS('wgit-demo'); let created = false; try { await demoFS.promises.mkdir('/workspace'); created = true; } catch (e) { if (e.code !== 'EEXIST') throw e; } if (created) await demoFS.promises.writeFile('/workspace/README.md', '# My project\n\nHello from Wgit!\n'); await setWorkspace(demoFS, 'demo-project', true); }
   catch (e) { print(`Could not open demo: ${e.message}`, 'error'); }
 });
@@ -106,7 +109,18 @@ body.addEventListener('pointerup', async () => {
 });
 input.addEventListener('keydown', e => { if (e.key === 'ArrowUp') { e.preventDefault(); if (historyIndex > 0) input.value = history[--historyIndex]; } if (e.key === 'ArrowDown') { e.preventDefault(); if (historyIndex < history.length) historyIndex++; input.value = history[historyIndex] || ''; } });
 function tokenize(str) { const tokens = []; const re = /(?:[^\s"']+|"[^"]*"|'[^']*')+/g; for (const match of str.matchAll(re)) tokens.push(match[0].replace(/"([^"]*)"|'([^']*)'/g, (_, a, b) => a ?? b)); return tokens; }
-const help = `Available commands\n  pwd                     Show the current folder\n  ls                      List files and folders\n  cd <folder>             Change folder (cd .. to go back)\n  clear                   Clear terminal output\n  git init                Initialize a repository\n  git status              Show changed files\n  git add <file|.>        Stage files\n  git commit -m "message"  Commit staged changes\n  git log                 Show commit history\n  git branch [name]       List or create branches\n  git switch <branch>     Switch branches\n  git config user.name <name>\n  git config user.email <email>\n\nWgit runs Git in your browser. Remote operations and shell commands are not supported yet.`;
+const help = `Available commands\n  pwd                     Show the current folder\n  ls                      List files and folders\n  cd <folder>             Change folder (cd .. to go back)\n  clear                   Clear terminal output\n  git init                Initialize a repository\n  git status              Show changed files\n  git add <file|.>        Stage files\n  git commit -m "message"  Commit staged changes\n  git log                 Show commit history\n  git branch [name]       List or create branches\n  git switch <branch>     Switch branches\n  git config user.name <name>\n  git config user.email <email>\n  git remote add <name> <https-url>  Add a GitHub remote\n  git remote -v           List remotes\n  git remote set-url <name> <url>  Change a remote\n  git remote remove <name>       Remove a remote\n  git push -u <remote> <branch>   Push and set upstream\n  git push                Push the current branch to its upstream\n\nGitHub HTTPS push is supported. Other hosts, force pushes, fetch, pull and shell commands are not supported yet.`;
+function requestPushToken(target) {
+  return new Promise(resolve => {
+    const dialog = $('#push-dialog'), form = $('#push-form'), token = $('#github-token');
+    $('#push-target').textContent = target.url;
+    $('#push-branch').textContent = target.branch;
+    function finish(value) { token.value = ''; form.removeEventListener('submit', submit); $('#cancel-push').removeEventListener('click', cancel); dialog.removeEventListener('cancel', cancel); if (dialog.open) dialog.close(); resolve(value); }
+    function cancel(event) { event.preventDefault(); finish(null); }
+    function submit(event) { event.preventDefault(); const value = token.value.trim(); if (!value || !/^[\x21-\x7e]+$/.test(value)) { token.setCustomValidity('Enter a token without spaces.'); token.reportValidity(); token.setCustomValidity(''); return; } finish(value); }
+    form.addEventListener('submit', submit); $('#cancel-push').addEventListener('click', cancel); dialog.addEventListener('cancel', cancel); dialog.showModal(); token.focus();
+  });
+}
 async function command(line) {
   const args = tokenize(line), cmd = args.shift(); if (!cmd) return;
   if (cmd === 'help') return print(help);
@@ -125,6 +139,22 @@ async function command(line) {
   if (state === 'unsupported') throw new Error('This folder uses a .git file; linked worktrees are not supported by Wgit.');
   if (state !== 'ready') throw new Error(incompleteMessage);
   const opts = { fs, dir: repo };
+  if (sub === 'remote') return print(await remoteCommand(opts, args));
+  if (sub === 'push') {
+    const target = await preparePush(opts, args);
+    const token = await requestPushToken(target);
+    if (!token) return print('Push cancelled.');
+    print(`Pushing ${target.branch} to ${target.url}...`);
+    let result;
+    try { result = await pushBranch(opts, target, token); }
+    catch (error) {
+      if (error.code === 'PushRejectedError' || /not-fast-forward|non-fast-forward/.test(error.message || '')) throw new Error('Push rejected: the remote has commits not in this branch. No force push was attempted.');
+      if (error.code === 'HttpError' && /\b(401|403|404)\b/.test(error.message || '')) throw new Error('GitHub denied access or the repository was not found. Check the URL, token permissions, and repository access.');
+      throw new Error('Push could not be confirmed. Check GitHub before retrying, then check the connection, token permissions, and branch protections.');
+    }
+    if (!result.upstreamSaved) return print(`Pushed ${target.branch} to ${target.url}, but could not save upstream settings. Check folder permissions.`, 'error');
+    return print(`Pushed ${target.branch} to ${target.url}${target.upstream ? ` and set upstream to ${target.remote}/${target.branch}` : ''}.`, 'success');
+  }
   if (sub === 'status') {
     const branch = await git.currentBranch({ ...opts, fullname: false }); const matrix = await git.statusMatrix(opts); const staged = [], changes = [], untracked = [];
     for (const [name,h,w,s] of matrix) { if (h !== s) staged.push(`  ${s === 0 ? 'deleted' : h === 0 ? 'new file' : 'modified'}: ${name}`); if (w !== s) (h === 0 && s === 0 ? untracked : changes).push(`  ${w === 0 ? 'deleted: ' : ''}${name}`); }
@@ -148,4 +178,4 @@ async function command(line) {
   if (sub === 'switch' || sub === 'checkout') { if (!args[0] || args.length > 1 || args[0].startsWith('-')) throw new Error('Use git switch <branch>.'); const matrix = await git.statusMatrix(opts); if (matrix.some(([,h,w,s]) => h !== w || h !== s)) throw new Error('Working tree has changes. Commit or remove them before switching branches.'); await git.checkout({ ...opts, ref: args[0] }); return print(`Switched to branch '${args[0]}'`, 'success'); }
   print(`Git command not supported yet: ${sub || '(none)'}. Type help to see available commands.`, 'error');
 }
-$('#terminal-form').addEventListener('submit', async e => { e.preventDefault(); const line = input.value.trim(); if (!line || busy) return; history.push(line); historyIndex = history.length; print(`➜  ${fs ? displayPath(cwd) : '~'}  ${line}`, 'entered'); input.value = ''; busy = true; input.disabled = true; try { await command(line); } catch (err) { print(`Error: ${err.message || err}`, 'error'); } finally { try { await refresh(); } catch {} busy = false; input.disabled = false; input.focus(); body.scrollTop = body.scrollHeight; } });
+$('#terminal-form').addEventListener('submit', async e => { e.preventDefault(); const line = input.value.trim(); if (!line || busy) return; if (/https?:\/\/[^\s/]*@/i.test(line) || /https?:\/\/[^\s]*[?#]/i.test(line)) { input.value = ''; print('Do not put credentials in a URL or terminal command. Use the secure push dialog instead.', 'error'); return; } history.push(line); historyIndex = history.length; print(`➜  ${fs ? displayPath(cwd) : '~'}  ${line}`, 'entered'); input.value = ''; busy = true; input.disabled = true; try { await command(line); } catch (err) { print(`Error: ${err.message || err}`, 'error'); } finally { try { await refresh(); } catch {} busy = false; input.disabled = false; input.focus(); body.scrollTop = body.scrollHeight; } });
