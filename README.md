@@ -15,7 +15,7 @@ Local folder access requires a secure context (HTTPS or localhost) and a browser
 
 Some Chromium browsers block creating `.git/hooks`. Wgit skips that optional directory when initializing a repository; it does not install or run Git hooks. If a previous Wgit initialization failed and left an **empty** `.git` directory, run `git init` again. If it contains data but is incomplete, Wgit will not overwrite it; inspect or back it up with a native Git client first. Other browser restrictions and permission errors can still prevent access to a folder.
 
-Use the expand button in the terminal header for a larger terminal. Select terminal text and release to copy it; the terminal shows “Copied” when it succeeds. If clipboard access is blocked, use Ctrl+C or Cmd+C.
+Use the theme button in the header to switch between light and dark mode; your choice is saved in this browser. Use the expand button in the terminal header for a larger terminal. Select terminal text and release to copy it; the terminal shows “Copied” when it succeeds. If clipboard access is blocked, use Ctrl+C or Cmd+C.
 
 ## Quick push
 
@@ -40,8 +40,10 @@ Replace the URL and branch with your own. On push or sync, Wgit asks in a separa
 
 The relay is a Cloudflare Pages Function in `functions/`; deploy via Pages Git integration with build output `dist`. A static-only deployment cannot push without the relay. Cloudflare request size limits, GitHub file limits, branch protection, and repository permissions still apply. Local development and Vite preview run the same relay.
 
-Type `help` in the terminal for the supported commands, including `git status --short`, `git log --oneline -n 5`, `git ls-files`, `git config --get user.name`, and `git switch -c <branch>`. Wgit is not a full shell: only GitHub HTTPS push and the guided `git sync` are supported; standalone fetch, pull, clone, force push, SSH, arbitrary shell commands, symlinks, and many Git options are not currently supported. Switching branches is blocked when the working tree has changes. Keep backups of important projects.
+Type `help` in the terminal for the supported commands, including `cat README.md` to display UTF-8 text files up to 1 MiB, `git status --short`, `git log --oneline -n 5`, `git ls-files`, `git config --get user.name`, and `git switch -c <branch>`. Wgit is not a full shell: only GitHub HTTPS push and the guided `git sync` are supported; standalone fetch, pull, clone, force push, SSH, arbitrary shell commands, symlinks, and many Git options are not currently supported. Switching branches is blocked when the working tree has changes. Keep backups of important projects.
 
 Build the static site with `npm run build`; deploy the generated `dist` directory to a static host such as Cloudflare Pages.
 
 Run the filesystem and repository tests with `npm test`. For the browser workflow test, build and start the preview (`npm run build && npm run preview`), then run `WGit_CHROME_PATH=/path/to/chromium npm run test:browser`. The browser test uses an origin-private filesystem handle in place of an interactive local folder picker.
+
+Made by Buffer.

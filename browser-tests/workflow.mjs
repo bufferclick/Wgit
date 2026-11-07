@@ -19,14 +19,31 @@ run('init', '-b', 'main'); run('config', 'user.name', 'Remote'); run('config', '
 writeFileSync(join(seed, 'README.md'), 'Remote README\n'); writeFileSync(join(seed, 'remote-only.txt'), 'Remote data\n');
 run('add', '.'); run('commit', '-m', 'Remote initial'); run('push', remoteDir, 'main');
 const browser = await chromium.launch({ executablePath, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-const context = await browser.newContext();
+const context = await browser.newContext({ colorScheme: 'light', viewport: { width: 1440, height: 900 } });
 await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 const page = await context.newPage();
 const errors = [];
 page.on('pageerror', error => errors.push(error.message));
 try {
   await page.goto(process.env.WGit_URL || 'http://localhost:4173/');
-  assert.match(await page.locator('.version-badge').textContent(), /v0\.0\.5/);
+  assert.match(await page.locator('.version-badge').textContent(), /v0\.0\.7/);
+  assert.equal(await page.title(), 'Wgit');
+  assert.ok((await page.locator('link[rel=icon]').getAttribute('href')).includes('favicon'));
+  assert.match(await page.locator('footer').textContent(), /Made by Buffer/);
+  assert.equal(await page.locator('.green-dot').count(), 0);
+  assert.deepEqual(await page.locator('.top-right').locator(':scope > *').evaluateAll(nodes => nodes.map(n => n.className)), ['open-source', 'theme-button', 'settings-button', 'github-top']);
+  await page.locator('#theme-toggle').click();
+  assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
+  assert.equal(await page.locator('#theme-toggle').getAttribute('aria-label'), 'Switch to light mode');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor), 'rgb(13, 17, 23)');
+  const themePage = await context.newPage(); await themePage.goto(process.env.WGit_URL || 'http://localhost:4173/');
+  assert.equal(await themePage.locator('html').getAttribute('data-theme'), 'dark');
+  await themePage.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await themePage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+  assert.equal(await themePage.locator('#theme-toggle').isVisible(), true);
+  await themePage.close();
+  await page.locator('#theme-toggle').click(); assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
+  await page.locator('#theme-toggle').click();
   assert.match(await page.locator('.about').textContent(), /Web-Git/);
   // Use a real browser filesystem handle from OPFS in place of the interactive
   // directory picker. This exercises nativeFS and browser Git, not Node globals.
@@ -51,6 +68,16 @@ try {
     assert.match(result, expected, `${text}: ${result}`);
     assert.doesNotMatch(result, /Buffer is not defined|^Error:/);
   }
+  await command('cat README.md', /README\.md.*Hello from Web-Git/s);
+  assert.equal(await page.locator('.file-output-content').last().textContent(), 'Hello from Web-Git\n');
+  const catInput = page.locator('#command-input');
+  await catInput.fill('cat game.wasm'); await catInput.press('Enter');
+  await page.waitForFunction(() => !document.querySelector('#command-input').disabled);
+  assert.match(await page.locator('#terminal-output .output-line').last().textContent(), /binary/);
+  await page.evaluate(async () => { const root = await navigator.storage.getDirectory(), project = await root.getDirectoryHandle('project'), file = await project.getFileHandle('malicious.txt', { create: true }), writer = await file.createWritable(); await writer.write('<img src=x onerror=alert(1)>'); await writer.close(); });
+  await command('cat malicious.txt', /<img src=x onerror=alert\(1\)>/);
+  assert.equal(await page.locator('.file-output-content img').count(), 0);
+  await page.evaluate(async () => { const root = await navigator.storage.getDirectory(), project = await root.getDirectoryHandle('project'); await project.removeEntry('malicious.txt'); });
   await command('git init', /Initialized empty Git repository/);
   await command('git status', /README\.md[\s\S]*game\.wasm/);
   await page.locator('#open-settings').click();
@@ -112,6 +139,8 @@ try {
   await input.fill('git sync origin main'); await input.press('Enter');
   await page.locator('#conflict-dialog').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#conflict-path').textContent(), 'README.md');
+  assert.match(await page.locator('#conflict-explanation').textContent(), /replace the version on GitHub after a successful push/);
+  assert.match(await page.locator('#keep-local').textContent(), /Use my local file/);
   await page.locator('#keep-local').click();
   await page.waitForFunction(() => !document.querySelector('#command-input').disabled);
   assert.match(await page.locator('#terminal-output .output-line').last().textContent(), /Synced origin\/main/);
@@ -138,7 +167,7 @@ try {
   await command('git log', /First commit/);
   await command('git branch feature', /Created branch feature/);
   await command('git switch feature', /Switched to branch/);
-  await command('git --version', /Wgit v0\.0\.5/);
+  await command('git --version', /Wgit v0\.0\.7/);
 
   // A real pointer drag selects terminal output, copies it and leaves it selected.
   const versionLine = page.locator('#terminal-output .output-line').last();
