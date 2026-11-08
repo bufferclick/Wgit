@@ -49,3 +49,11 @@ Build the static site with `npm run build`; deploy the generated `dist` director
 Run the filesystem and repository tests with `npm test`. For the browser workflow test, build and start the preview (`npm run build && npm run preview`), then run `WGit_CHROME_PATH=/path/to/chromium npm run test:browser`. The browser test uses an origin-private filesystem handle in place of an interactive local folder picker.
 
 Made by Buffer.
+
+## Community discussions
+
+The **Community** tab opens `/community`, where visitors can start discussions and reply. Posts are public. Wgit uses the saved Settings name as an unverified display name; otherwise it uses `guest - country` based on Cloudflare's approximate country, or `guest - unknown` if unavailable. No login is required, so names and locations are not proof of identity.
+
+The public Supabase Edge Function enforces a shared 60-second interval between discussions and replies per network IP using an atomic database operation. It stores a salted hash of the IP for rate limiting, not the raw address; people sharing an IP also share the limit. This reduces spam but does not prevent evasion through different networks. Discussion content is stored in Supabase. There is no automated moderation; operators can remove abusive posts using the Supabase dashboard. Do not post sensitive information.
+
+The deployed WgitDB project is configured in `src/community.js`. For another deployment, provision a Supabase project, apply the SQL migration in `supabase/migrations`, set a random `COMMUNITY_IP_SALT` secret in that project, and deploy `supabase/functions/community` with JWT verification disabled. The Edge Function alone uses Supabase's built-in service-role key; never put it in frontend code. The function relies on Supabase Cloud's Cloudflare-provided `cf-connecting-ip` header; missing or invalid addresses share a single rate-limit bucket. Verify this trusted-header assumption on any different hosting setup before deploying. Cloudflare Pages supplies the country through `functions/api/community-country.js`; local previews without Cloudflare fall back to unknown. Browser integration checks run with `npm run test:community` after starting the preview and setting `WGit_CHROME_PATH`.

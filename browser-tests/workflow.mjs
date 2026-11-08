@@ -28,7 +28,7 @@ const errors = [];
 page.on('pageerror', error => errors.push(error.message));
 try {
   await page.goto(process.env.WGit_URL || 'http://localhost:4173/');
-  assert.match(await page.locator('.version-badge').textContent(), /v0\.0\.9/);
+  assert.match(await page.locator('.version-badge').textContent(), /v0\.0\.10/);
   assert.equal(await page.title(), 'Wgit');
   assert.ok((await page.locator('link[rel=icon]').getAttribute('href')).includes('favicon'));
   assert.match(await page.locator('footer').textContent(), /Made by Buffer/);
@@ -206,7 +206,7 @@ try {
   await command('git log', /First commit/);
   await command('git branch feature', /Created branch feature/);
   await command('git switch feature', /Switched to branch/);
-  await command('git --version', /Wgit v0\.0\.9/);
+  await command('git --version', /Wgit v0\.0\.10/);
 
   // A real pointer drag selects terminal output, copies it and leaves it selected.
   const versionLine = page.locator('#terminal-output .output-line').last();
