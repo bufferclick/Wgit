@@ -71,5 +71,6 @@ test('votes require verification and only accept known updates and directions', 
   stub(); assert.equal((await handler(req('vote',{release:'v0.1.3',direction:1}))).status,401);
   stub(user('42','real-user')); assert.equal((await handler(req('vote',{release:'bogus',direction:1},'jwt'))).status,400);
   assert.equal((await handler(req('vote',{release:'v0.1.3',direction:-1},'jwt'))).status,200);
+  assert.equal((await handler(req('vote',{release:'v0.1.5',direction:1},'jwt'))).status,200);
 });
 test.after(() => { globalThis.fetch = realFetch; globalThis.Deno = originalDeno; });

@@ -1,4 +1,6 @@
-if (window.location.pathname === '/settings/admin') {
+if (window.location.pathname === '/notifications') {
+  import('./notifications.js');
+} else if (window.location.pathname === '/settings/admin') {
   import('./admin.js');
 } else if (window.location.pathname === '/logs') {
   import('./logs.js');

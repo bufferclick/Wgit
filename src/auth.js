@@ -18,3 +18,17 @@ export async function apiRequest(action, { method = 'GET', data, authenticated =
   return payload;
 }
 export async function verifiedUser() { if (!await token()) return null; return apiRequest('me'); }
+// GitHub's repo OAuth scope also grants write access to private repositories.
+// It is requested only after the user explicitly opts in from the picker.
+export async function connectRepositories() {
+  const redirectTo = `${location.origin}${location.pathname}${location.search}`;
+  const { error } = await supabase.auth.signInWithOAuth({ provider:'github', options:{ redirectTo, scopes:'repo read:user' } });
+  if (error) throw error;
+}
+export async function providerToken() { const { data, error } = await supabase.auth.getSession(); if (error) throw error; return data.session?.provider_token || ''; }
+export async function githubIdentity() {
+  const { data, error } = await supabase.auth.getUser(); if (error) throw error;
+  const identity = data.user?.identities?.find(i => i.provider === 'github');
+  const id = String(identity?.provider_id || identity?.identity_data?.sub || '');
+  return /^[0-9]{1,20}$/.test(id) ? id : null;
+}

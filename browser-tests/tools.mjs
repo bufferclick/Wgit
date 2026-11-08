@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import { chromium } from 'playwright-core';
+const browser=await chromium.launch({executablePath:process.env.WGit_CHROME_PATH,headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+const context=await browser.newContext({viewport:{width:1200,height:900}});
+await context.addInitScript(()=>{const exp=Math.floor(Date.now()/1000)+3600;const jwt=`${btoa('{}')}.${btoa(JSON.stringify({exp,sub:'00000000-0000-4000-8000-000000000001'}))}.sig`;sessionStorage.setItem('sb-jjkuljatqsjndqwrqtxe-auth-token',JSON.stringify({access_token:jwt,provider_token:'test-oauth-token',refresh_token:'test',token_type:'bearer',expires_in:3600,expires_at:exp,user:{id:'00000000-0000-4000-8000-000000000001',aud:'authenticated'}}));});
+const posts=[{id:'00000001-1234-4234-8234-123456789abc',parent_id:null,title:'My thread',body:'hello',author:'owner',github_id:'42',created_at:'2026-01-01T00:00:00Z'},{id:'00000002-1234-4234-8234-123456789abc',parent_id:'00000001-1234-4234-8234-123456789abc',title:null,body:'Great idea',author:'friend',github_id:'43',created_at:'2026-01-02T00:00:00Z'}];
+await context.route('**/auth/v1/user',r=>r.fulfill({json:{id:'00000000-0000-4000-8000-000000000001',aud:'authenticated',identities:[{provider:'github',provider_id:'42',identity_data:{sub:'42',user_name:'owner'}}]}}));
+await context.route('**/functions/v1/community**',r=>r.fulfill({json:new URL(r.request().url()).searchParams.get('action')==='me'?{login:'owner',admin:false,banned:false}:posts}));
+await context.route('https://api.github.com/user/repos**',r=>r.fulfill({json:[{full_name:'owner/example',html_url:'https://github.com/owner/example',private:true}]}));
+const page=await context.newPage(); const errors=[];page.on('pageerror',e=>errors.push(e.message));
+const tool=name=>page.locator('.tool-card').filter({has:page.getByText(name,{exact:true})}).click();
+const close=()=>page.locator('.tool-close').click();
+async function command(value,expected){const input=page.locator('#command-input');await input.fill(value);await input.press('Enter');await page.waitForFunction(()=>document.querySelector('#terminal-form').dataset.busy!=='true');if(expected)assert.match(await page.locator('#terminal-output').textContent(),expected);}
+try {
+ await page.goto('http://localhost:4173');
+ await page.evaluate(async()=>{const root=await navigator.storage.getDirectory();const project=await root.getDirectoryHandle('tool-project',{create:true});const file=await project.getFileHandle('hello.txt',{create:true});const w=await file.createWritable();await w.write('hello world\n');await w.close();window.showDirectoryPicker=async()=>project;});
+ await page.locator('#open-folder').click();await page.waitForFunction(()=>document.querySelector('#side-folder').textContent==='tool-project');
+ await tool('Files'); await page.getByRole('button',{name:'▤ hello.txt'}).click(); await page.locator('.tool-code').waitFor(); assert.equal(await page.locator('.tool-code').textContent(),'hello world\n'); await close();
+ await page.locator('#command-input').fill('git sta');await page.locator('#command-input').press('Tab');assert.equal(await page.locator('#command-input').inputValue(),'git status');
+ await command('git init',/Initialized/); await command('git add .',/Staged/);
+ await page.locator('#open-settings').click();await page.locator('#settings-name').fill('Tester');await page.locator('#settings-email').fill('tester@github.com');await page.locator('#settings-form button[type=submit]').click();
+ await tool('Commit');await page.getByText('Added · hello.txt').waitFor();await page.getByPlaceholder('Describe your changes').fill('Initial commit');await page.getByRole('button',{name:'Commit staged changes'}).click();await page.getByText(/Created commit/).waitFor();await close();
+ await page.evaluate(async()=>{const r=await navigator.storage.getDirectory(),p=await r.getDirectoryHandle('tool-project'),f=await p.getFileHandle('hello.txt'),w=await f.createWritable();await w.write('hello changed\n');await w.close();});
+ await tool('Changes');await page.getByRole('button',{name:'Changed · hello.txt'}).click();await page.locator('.diff-added').waitFor();assert.match(await page.locator('.diff-removed').textContent(),/hello world/);assert.match(await page.locator('.diff-added').textContent(),/hello changed/);await close();
+ await tool('History');await page.getByText('Initial commit',{exact:true}).waitFor();assert.equal(await page.locator('.history-graph svg circle').count(),1);await close();
+ page.on('dialog',d=>d.accept());await tool('Snapshots');await page.getByRole('button',{name:'Create snapshot'}).click();await page.getByText('Saved 1 files.').waitFor();
+ await page.evaluate(async()=>{const r=await navigator.storage.getDirectory(),p=await r.getDirectoryHandle('tool-project'),f=await p.getFileHandle('hello.txt'),w=await f.createWritable();await w.write('overwritten\n');await w.close();const x=await p.getFileHandle('extra.txt',{create:true});const wx=await x.createWritable();await wx.write('extra');await wx.close();});
+ await page.getByRole('button',{name:'Restore',exact:true}).click();await page.getByText(/Snapshot restored/).waitFor();assert.equal(await page.evaluate(async()=>{const r=await navigator.storage.getDirectory(),p=await r.getDirectoryHandle('tool-project');return (await (await p.getFileHandle('hello.txt')).getFile()).text();}),'hello changed\n');assert.equal(await page.evaluate(async()=>{const r=await navigator.storage.getDirectory(),p=await r.getDirectoryHandle('tool-project');return (await (await p.getFileHandle('extra.txt')).getFile()).text();}),'extra');await close();
+ await tool('GitHub repos'); await page.getByRole('button',{name:'owner/example · private'}).click();await page.getByText(/Origin set to/).waitFor();await close();await command('git remote -v',/github.com\/owner\/example.git/);
+ await tool('Learn Wgit');await page.getByText('Welcome to Wgit').waitFor();await page.getByRole('button',{name:'Next lesson →'}).click();await page.getByText('Your workspace and files').waitFor();await page.getByRole('button',{name:'Try: ls'}).click();assert.equal(await page.locator('#command-input').inputValue(),'ls');
+ await page.getByRole('link',{name:'Notifications'}).click();await page.getByText(/1 unread · 1 replies/).waitFor();await page.getByText(/Great idea/).waitFor();await page.getByRole('button',{name:'Mark all read'}).click();await page.getByText(/0 unread/).waitFor();await page.reload();await page.getByText(/0 unread/).waitFor();
+ assert.deepEqual(errors,[]);console.log('Workspace tools and notifications browser checks passed.');
+} finally { await browser.close(); }

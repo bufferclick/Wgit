@@ -25,7 +25,7 @@ try {
   dialogs=0; const acceptAll=async dialog => { dialogs++; await dialog.accept(dialog.type()==='prompt'?'DELETE SELECTED DATA':undefined); }; page.on('dialog',acceptAll); await page.locator('#wipe-data').click(); page.off('dialog',acceptAll);
   await page.getByText('Selected data deleted.', {exact:false}).waitFor(); assert.match(await page.locator('#admin-status').textContent(), /discussions and replies: 6; update votes: 1/); assert.equal(dialogs,3); assert.deepEqual(requests.at(-1).body.categories,['posts','votes']);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-  await page.getByRole('link',{name:'Logs'}).click(); await page.getByText('Verified as @bufferclick').waitFor(); assert.match(await page.locator('.release-item').first().textContent(),/v0.1.4/);
+  await page.getByRole('link',{name:'Logs'}).click(); await page.getByText('Verified as @bufferclick').waitFor(); assert.match(await page.locator('.release-item').first().textContent(),/v0.1.5/);
   const up=page.locator('.release-item').first().getByRole('button',{name:/Upvote/}); await up.click(); await page.waitForFunction(()=>document.querySelector('.release-item .vote-button').getAttribute('aria-pressed')==='true'); assert.equal(requests.at(-1).action,'vote'); assert.equal(requests.at(-1).body.direction,1);
   await page.locator('.release-item').first().getByRole('button',{name:/Downvote/}).click(); await page.waitForFunction(()=>document.querySelectorAll('.release-item .vote-button')[1].getAttribute('aria-pressed')==='true'); assert.equal(requests.at(-1).body.direction,-1);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);

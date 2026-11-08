@@ -62,7 +62,7 @@ try {
   await page.locator('#theme-toggle').click(); assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
   await page.setViewportSize({ width: 390, height: 844 }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.locator('.post-card').first().getByRole('button', { name: 'Delete' }).click(); await page.waitForURL('**/community'); await page.getByText('No discussions yet').waitFor();
-  await page.goto('http://localhost:4173/settings'); assert.equal(await page.locator('#settings-dialog').isVisible(), true);
+  await page.goto('http://localhost:4173/settings'); await page.locator('#settings-dialog').waitFor({state:'visible'});
   await page.locator('#settings-name').fill('Buffer'); await page.locator('#settings-email').fill('bad@example.com'); await page.locator('#settings-form button[type=submit]').click();
   assert.match(await page.locator('#settings-error').textContent(), /username@github.com/); assert.equal(page.url(), 'http://localhost:4173/settings');
   await page.locator('#settings-email').fill('BufferClick@github.com'); await page.locator('#settings-form button[type=submit]').click();
