@@ -28,7 +28,7 @@ const errors = [];
 page.on('pageerror', error => errors.push(error.message));
 try {
   await page.goto(process.env.WGit_URL || 'http://localhost:4173/');
-  assert.match(await page.locator('.version-badge').textContent(), /v0\.0\.11/);
+  assert.match(await page.locator('.version-badge').textContent(), /v0\.1\.2/);
   assert.equal(await page.title(), 'Wgit');
   assert.ok((await page.locator('link[rel=icon]').getAttribute('href')).includes('favicon'));
   assert.match(await page.locator('footer').textContent(), /Made by Buffer/);
@@ -66,7 +66,7 @@ try {
   });
   await page.locator('#open-folder').click();
   await page.waitForFunction(() => document.querySelector('#side-folder').textContent === 'project');
-  async function command(text, expected) {
+  async function command(text, expected, allowError = false) {
     const input = page.locator('#command-input');
     const lines = page.locator('#terminal-output .output-line');
     const previousCount = await lines.count();
@@ -74,7 +74,7 @@ try {
     await page.waitForFunction(count => document.querySelectorAll('#terminal-output .output-line').length >= count + 2 && !document.querySelector('#command-input').disabled, previousCount);
     const result = await lines.last().textContent();
     assert.match(result, expected, `${text}: ${result}`);
-    assert.doesNotMatch(result, /Buffer is not defined|^Error:/);
+    if (!allowError) assert.doesNotMatch(result, /Buffer is not defined|^Error:/);
   }
   await command('cat README.md', /README\.md.*Hello from Web-Git/s);
   assert.equal(await page.locator('.file-output-content').last().textContent(), 'Hello from Web-Git\n');
@@ -100,6 +100,8 @@ try {
   await command('git status', /working tree clean/);
   await command('git ls-files', /README\.md[\s\S]*game\.wasm/);
   await command('git config --get user.name', /^Buffer$/);
+  await command('git config user.email invalid@example.com', /username@github.com/, true);
+  await command('git config --get user.email', /^bufferclick@github.com$/);
   await command('git log --oneline -n 1', /First commit/);
   await command('git branch -M main', /Already on branch main/);
   assert.ok(!(await page.locator('#terminal-output').textContent()).includes('Created branch -M'));
@@ -206,7 +208,7 @@ try {
   await command('git log', /First commit/);
   await command('git branch feature', /Created branch feature/);
   await command('git switch feature', /Switched to branch/);
-  await command('git --version', /Wgit v0\.0\.11/);
+  await command('git --version', /Wgit v0\.1\.2/);
 
   // A real pointer drag selects terminal output, copies it and leaves it selected.
   const versionLine = page.locator('#terminal-output .output-line').last();
