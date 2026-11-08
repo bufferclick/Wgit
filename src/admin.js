@@ -26,7 +26,7 @@ $('#wipe-data').addEventListener('click', async () => {
   if (!confirm(`Confirmation 2 of 3: This permanently deletes ${description}. It cannot be undone. Continue?`)) return;
   if (prompt('Confirmation 3 of 3: Type DELETE SELECTED DATA to confirm.') !== 'DELETE SELECTED DATA') return status('Deletion cancelled.');
   const button = $('#wipe-data'); button.disabled = true;
-  try { await apiRequest('wipe', { method:'POST', data:{ categories, confirmations:['reviewed','irreversible','DELETE SELECTED DATA'] } }); status('Selected data deleted.'); if (categories.includes('accounts')) { await signOut().catch(() => {}); } await initialize(); }
+  try { const result = await apiRequest('wipe', { method:'POST', data:{ categories, confirmations:['reviewed','irreversible','DELETE SELECTED DATA'] } }); const summary = categories.map(category => `${label[category]}: ${result.deleted?.[category] ?? 'completed'}`).join('; '); status(`Selected data deleted. ${summary}`); if (categories.includes('posts')) { try { sessionStorage.removeItem('wgit.community.cache.v2'); } catch {} } if (categories.includes('accounts')) { await signOut().catch(() => {}); } await initialize(); }
   catch (e) { status(e.message, true); }
   finally { button.disabled = false; }
 });

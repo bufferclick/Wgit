@@ -45,3 +45,26 @@
 .prompt-git{width:13px;height:13px;vertical-align:-2px;stroke:none}
 
 #settings-dialog .auth-settings{margin-top:20px;padding-top:16px;border-top:1px solid #d1d9e0}#settings-dialog .auth-settings strong{font-size:13px}#settings-dialog .auth-settings p{margin:6px 0 10px;font-size:12px}#settings-dialog .auth-settings .button{background:#f6f8fa;color:#1f2328}[data-theme="dark"] #settings-dialog .auth-settings{border-color:#30363d}[data-theme="dark"] #settings-dialog .auth-settings .button{background:#21262d;color:#e6edf3}
+
+/* Light mode applies to the whole shell, including the header and terminal. */
+[data-theme="light"] .topbar{background:#f6f8fa;color:#1f2328;border-bottom:1px solid #d1d9e0}
+[data-theme="light"] .top-product{color:#1f2328}
+[data-theme="light"] .top-context,[data-theme="light"] .open-source{color:#57606a}
+[data-theme="light"] .top-divider{background:#d1d9e0}
+[data-theme="light"] .brand-mark{background:#eaeef2;color:#1f2328}
+[data-theme="light"] .version-badge{border-color:#d1d9e0;color:#57606a}
+[data-theme="light"] .theme-button,[data-theme="light"] .settings-button,[data-theme="light"] .github-top{color:#1f2328;border-color:#d1d9e0}
+[data-theme="light"] .theme-button:hover,[data-theme="light"] .settings-button:hover,[data-theme="light"] .github-top:hover{background:#eaeef2}
+[data-theme="light"] .terminal-body{background:#fff;color:#24292f;scrollbar-color:#afb8c1 #f6f8fa}
+[data-theme="light"] #command-input{color:#1f2328;caret-color:#1a7f37}
+[data-theme="light"] #command-input::placeholder{color:#8c959f}
+[data-theme="light"] .terminal-hint{color:#656d76}
+[data-theme="light"] .terminal-hint span,[data-theme="light"] .output-line.entered{color:#1f2328}
+[data-theme="light"] .output-line.success{color:#116329}
+[data-theme="light"] .output-line.error{color:#cf222e}
+[data-theme="light"] .prompt-path{color:#0969da}
+[data-theme="light"] .file-output{background:#fff;border-color:#d1d9e0}
+[data-theme="light"] .file-output-heading{background:#f6f8fa;color:#1f2328;border-color:#d1d9e0}
+[data-theme="light"] .file-output-glyph{color:#0969da}
+[data-theme="light"] .file-output-badge{color:#656d76}
+[data-theme="light"] .file-output-content{color:#24292f}

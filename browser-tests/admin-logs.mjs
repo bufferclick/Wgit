@@ -10,7 +10,7 @@ await context.route('**/functions/v1/community**', async route => {
   if (action === 'me') return route.fulfill({json:{login:admin?'bufferclick':'other',admin,banned:false}});
   if (action === 'bans' && req.method()==='GET') return route.fulfill({json:[{github_id:'42',github_login:'test-user'}]});
   if (action === 'votes') return route.fulfill({json:{totals:Object.entries(votes).map(([release_id,direction])=>({release_id,upvotes:direction===1?1:0,downvotes:direction===-1?1:0})),mine:Object.entries(votes).map(([release_id,direction])=>({release_id,direction}))}});
-  if (req.method()==='POST') { const body=req.postDataJSON(); requests.push({action,body}); if (action==='vote') votes[body.release]=body.direction; return route.fulfill({json:{ok:true}}); }
+  if (req.method()==='POST') { const body=req.postDataJSON(); requests.push({action,body}); if (action==='vote') votes[body.release]=body.direction; return route.fulfill({json:action==='wipe'?{ok:true,deleted:{posts:6,votes:1}}:{ok:true}}); }
   return route.fulfill({json:[]});
 });
 const page=await context.newPage(); const errors=[]; page.on('pageerror',e=>errors.push(e.message));
@@ -23,9 +23,9 @@ try {
   let dialogs=0; const confirmOnlyFirst = async dialog => { dialogs++; if(dialogs===1) await dialog.accept(); else await dialog.dismiss(); };
   page.on('dialog',confirmOnlyFirst); await page.locator('#wipe-data').click(); page.off('dialog',confirmOnlyFirst); assert.equal(dialogs,2); assert.equal(requests.filter(x=>x.action==='wipe').length,0);
   dialogs=0; const acceptAll=async dialog => { dialogs++; await dialog.accept(dialog.type()==='prompt'?'DELETE SELECTED DATA':undefined); }; page.on('dialog',acceptAll); await page.locator('#wipe-data').click(); page.off('dialog',acceptAll);
-  await page.getByText('Selected data deleted.').waitFor(); assert.equal(dialogs,3); assert.deepEqual(requests.at(-1).body.categories,['posts','votes']);
+  await page.getByText('Selected data deleted.', {exact:false}).waitFor(); assert.match(await page.locator('#admin-status').textContent(), /discussions and replies: 6; update votes: 1/); assert.equal(dialogs,3); assert.deepEqual(requests.at(-1).body.categories,['posts','votes']);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-  await page.getByRole('link',{name:'Logs'}).click(); await page.getByText('Verified as @bufferclick').waitFor(); assert.match(await page.locator('.release-item').first().textContent(),/v0.1.3/);
+  await page.getByRole('link',{name:'Logs'}).click(); await page.getByText('Verified as @bufferclick').waitFor(); assert.match(await page.locator('.release-item').first().textContent(),/v0.1.4/);
   const up=page.locator('.release-item').first().getByRole('button',{name:/Upvote/}); await up.click(); await page.waitForFunction(()=>document.querySelector('.release-item .vote-button').getAttribute('aria-pressed')==='true'); assert.equal(requests.at(-1).action,'vote'); assert.equal(requests.at(-1).body.direction,1);
   await page.locator('.release-item').first().getByRole('button',{name:/Downvote/}).click(); await page.waitForFunction(()=>document.querySelectorAll('.release-item .vote-button')[1].getAttribute('aria-pressed')==='true'); assert.equal(requests.at(-1).body.direction,-1);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);

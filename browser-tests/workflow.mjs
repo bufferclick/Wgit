@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -28,9 +28,9 @@ const errors = [];
 page.on('pageerror', error => errors.push(error.message));
 try {
   await page.goto(process.env.WGit_URL || 'http://localhost:4173/');
-  assert.match(await page.locator('.version-badge').textContent(), /v0\.1\.3/);
+  assert.match(await page.locator('.version-badge').textContent(), /v0\.1\.4/);
   assert.equal(await page.title(), 'Wgit');
-  assert.equal(await page.locator('#prompt-path').textContent(), '¥');
+  assert.equal(await page.locator('#prompt-path').textContent(), '$');
   assert.equal(await page.locator('.prompt-git').count(), 1);
   assert.ok((await page.locator('link[rel=icon]').getAttribute('href')).includes('favicon'));
   assert.match(await page.locator('footer').textContent(), /Made by Buffer/);
@@ -47,6 +47,9 @@ try {
   assert.equal(await themePage.locator('#theme-toggle').isVisible(), true);
   await themePage.close();
   await page.locator('#theme-toggle').click(); assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
+  assert.equal(await page.locator('.topbar').evaluate(e => getComputedStyle(e).backgroundColor), 'rgb(246, 248, 250)');
+  assert.equal(await page.locator('.terminal-body').evaluate(e => getComputedStyle(e).backgroundColor), 'rgb(255, 255, 255)');
+  assert.equal(await page.locator('#terminal-state').count(), 0);
   await page.locator('#theme-toggle').click();
   assert.match(await page.locator('.about').textContent(), /Web-Git/);
   assert.equal(await page.locator('.workspace-label h1').textContent(), 'Browser-based Git workspace');
@@ -73,7 +76,7 @@ try {
     const lines = page.locator('#terminal-output .output-line');
     const previousCount = await lines.count();
     await input.fill(text); await input.press('Enter');
-    await page.waitForFunction(count => document.querySelectorAll('#terminal-output .output-line').length >= count + 2 && !document.querySelector('#command-input').disabled, previousCount);
+    await page.waitForFunction(count => document.querySelectorAll('#terminal-output .output-line').length >= count + 2 && document.querySelector('#terminal-form').dataset.busy !== 'true', previousCount);
     const result = await lines.last().textContent();
     assert.match(result, expected, `${text}: ${result}`);
     if (!allowError) assert.doesNotMatch(result, /Buffer is not defined|^Error:/);
@@ -82,7 +85,7 @@ try {
   assert.equal(await page.locator('.file-output-content').last().textContent(), 'Hello from Web-Git\n');
   const catInput = page.locator('#command-input');
   await catInput.fill('cat game.wasm'); await catInput.press('Enter');
-  await page.waitForFunction(() => !document.querySelector('#command-input').disabled);
+  await page.waitForFunction(() => document.querySelector('#terminal-form').dataset.busy !== 'true');
   assert.match(await page.locator('#terminal-output .output-line').last().textContent(), /binary/);
   await page.evaluate(async () => { const root = await navigator.storage.getDirectory(), project = await root.getDirectoryHandle('project'), file = await project.getFileHandle('malicious.txt', { create: true }), writer = await file.createWritable(); await writer.write('<img src=x onerror=alert(1)>'); await writer.close(); });
   await command('cat malicious.txt', /<img src=x onerror=alert\(1\)>/);
@@ -130,7 +133,7 @@ try {
   assert.match(await page.locator('#push-target').textContent(), /github.com\/acme\/project.git/);
   await page.locator('#github-token').fill('dummy-test-token');
   await page.locator('#push-form button[type=submit]').click();
-  await page.waitForFunction(() => !document.querySelector('#command-input').disabled);
+  await page.waitForFunction(() => document.querySelector('#terminal-form').dataset.busy !== 'true');
   assert.match(await page.locator('#terminal-output .output-line').last().textContent(), /Push rejected.*git sync origin main/);
   assert.equal(await page.locator('#github-token').inputValue(), '');
   await page.locator('#open-settings').click();
@@ -165,7 +168,7 @@ try {
   assert.equal(await page.locator('#settings-always-local').isChecked(), false); // cancel did not save
   await page.locator('#settings-always-local').check();
   await page.locator('#settings-form button[type=submit]').click();
-  await page.waitForFunction(() => !document.querySelector('#command-input').disabled);
+  await page.waitForFunction(() => document.querySelector('#terminal-form').dataset.busy !== 'true');
   assert.equal(await page.locator('#conflict-dialog').isVisible(), false);
   assert.equal((await page.locator('#terminal-output').textContent()).match(/Conflict: using local file for/g).length, 20);
   assert.match(await page.locator('#terminal-output .output-line').last().textContent(), /Synced origin\/main/);
@@ -200,7 +203,7 @@ try {
   await input.fill('git push'); await input.press('Enter');
   await page.locator('#push-dialog').waitFor({ state: 'visible' });
   await page.locator('#cancel-push').click();
-  await page.waitForFunction(() => !document.querySelector('#command-input').disabled);
+  await page.waitForFunction(() => document.querySelector('#terminal-form').dataset.busy !== 'true');
   assert.match(await page.locator('#terminal-output .output-line').last().textContent(), /Push cancelled/);
   assert.equal(await page.locator('#github-token').inputValue(), '');
   await page.locator('#fullscreen-terminal').click();
@@ -210,7 +213,7 @@ try {
   await command('git log', /First commit/);
   await command('git branch feature', /Created branch feature/);
   await command('git switch feature', /Switched to branch/);
-  await command('git --version', /Wgit v0\.1\.3/);
+  await command('git --version', /Wgit v0\.1\.4/);
 
   // A real pointer drag selects terminal output, copies it and leaves it selected.
   const versionLine = page.locator('#terminal-output .output-line').last();
@@ -243,17 +246,33 @@ try {
   await page.waitForFunction(() => document.querySelector('#copy-state').textContent.includes('Copy blocked'));
   // Verify the browser-storage demo also supports a complete Git workflow.
   await page.locator('#try-demo').click();
-  await page.waitForFunction(() => document.querySelector('#side-folder').textContent === 'demo-project');
+  await page.waitForFunction(() => document.querySelector('#side-folder').textContent === 'Wgit (demo)');
+  assert.match(await page.locator('.demo-row').textContent(), /Demo project: Wgit files/);
+  await command('ls', /README\.md.*src/s);
+  await command('cat README.md', /Wgit/);
+  // Queue two commands before the first finishes; input stays editable and order is preserved.
+  await page.evaluate(() => {
+    const input = document.querySelector('#command-input'), form = document.querySelector('#terminal-form');
+    input.value = 'cd src'; form.requestSubmit();
+    if (input.disabled) throw new Error('Input locked during command');
+    input.value = 'pwd'; form.requestSubmit();
+  });
+  await page.waitForFunction(() => document.querySelector('#terminal-form').dataset.busy !== 'true');
+  assert.match(await page.locator('#terminal-output .output-line').last().textContent(), /Wgit \(demo\)\/src/);
+  await page.evaluate(() => { const input=document.querySelector('#command-input'); input.value='cd ..'; document.querySelector('#terminal-form').requestSubmit(); });
+  await page.waitForFunction(() => document.querySelector('#terminal-form').dataset.busy !== 'true');
   await command('git init', /Initialized empty Git repository/);
+  await page.locator('#try-demo').click();
+  await page.waitForFunction(() => document.querySelector('#status-label').textContent !== 'Not connected' && document.querySelector('#side-folder').textContent === 'Wgit (demo)');
   await command('git status --short', /\?\? README\.md/);
   await command('git remote add origin https://github.com/acme/project.git', /Added remote origin/);
   await input.fill('wgit push demo-shortcut'); await input.press('Enter');
   await page.locator('#push-dialog').waitFor({ state: 'visible' });
   await page.locator('#github-token').fill('dummy-test-token');
   await page.locator('#push-form button[type=submit]').click();
-  await page.waitForFunction(() => !document.querySelector('#command-input').disabled);
+  await page.waitForFunction(() => document.querySelector('#terminal-form').dataset.busy !== 'true');
   assert.match(await page.locator('#terminal-output .output-line').last().textContent(), /Pushed main.*demo-shortcut/);
-  assert.equal(execFileSync('git', ['--git-dir', remoteDir, 'show', 'demo-shortcut:README.md'], { encoding: 'utf8' }), '# My project\n\nHello from Wgit!\n');
+  assert.equal(execFileSync('git', ['--git-dir', remoteDir, 'show', 'demo-shortcut:README.md'], { encoding: 'utf8' }), readFileSync('README.md', 'utf8'));
   // The shortcut also handles an existing unrelated branch and prompts for conflicts.
   await input.fill('wgit push main'); await input.press('Enter');
   await page.locator('#push-dialog').waitFor({ state: 'visible' });
@@ -262,9 +281,9 @@ try {
   await page.locator('#conflict-dialog').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#conflict-path').textContent(), 'README.md');
   await page.locator('#keep-local').click();
-  await page.waitForFunction(() => !document.querySelector('#command-input').disabled);
+  await page.waitForFunction(() => document.querySelector('#terminal-form').dataset.busy !== 'true');
   assert.match(await page.locator('#terminal-output .output-line').last().textContent(), /branch main after syncing/);
-  assert.equal(execFileSync('git', ['--git-dir', remoteDir, 'show', 'main:README.md'], { encoding: 'utf8' }), '# My project\n\nHello from Wgit!\n');
+  assert.equal(execFileSync('git', ['--git-dir', remoteDir, 'show', 'main:README.md'], { encoding: 'utf8' }), readFileSync('README.md', 'utf8'));
   assert.equal(execFileSync('git', ['--git-dir', remoteDir, 'show', 'main:remote-only.txt'], { encoding: 'utf8' }), 'Remote data\n');
   await command('git log', /Author: Buffer <bufferclick@github.com>/);
   await command('git status', /working tree clean/);
