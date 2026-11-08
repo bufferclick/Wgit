@@ -27,6 +27,8 @@ wgit push main
 
 This stages **all non-ignored changes in the repository**, including deletions and previously staged changes, creates a local commit named `Wgit: update project` when needed, and pushes the current local branch to the specified branch on `origin`. Review your files and `.gitignore` first: secrets that are not ignored can be included. It uses your saved commit identity and asks for GitHub authentication if none is saved. If the remote has conflicting history, it fetches and merges that history into the **current local branch**, asks you to choose a version of each conflicting file, then retries the push without force. Canceling a conflict leaves any automatic local commit in place. Network, permissions, protected-branch errors, unsafe file collisions, and other failures may still need your attention; inspect `git status` and GitHub before retrying. If you target a differently named branch, Wgit does not switch your local branch or change its upstream.
 
+By default, Wgit asks which version to keep for each conflict. To skip those prompts, enable **Always use local for conflicts** in Settings, including directly from a conflict prompt. This applies to every repository in this browser, for both `wgit push` and `git sync`, until you turn it off. It chooses the whole local file (or local deletion), including when GitHub also changed it; after a successful push that choice replaces the GitHub version. The other version remains in Git history. Non-conflicting GitHub files are still preserved, and pushes are never forced. Wgit logs each automatic choice in the terminal.
+
 ## Push to GitHub
 
 Create a GitHub repository, then in Wgit run:
