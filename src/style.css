@@ -27,3 +27,17 @@
 @media(max-width:480px){.terminal-title>.terminal-divider,.terminal-title>span:last-child{display:none}.terminal-actions{gap:10px}}
 /* Keep the workspace heading and demo access compact. */
 .workspace-label{display:flex;align-items:center;gap:10px;padding:38px 0 22px}.workspace-label img{width:23px;height:23px}.workspace-label h1{margin:0;color:#57606a;font-size:11px;font-weight:700;letter-spacing:.9px;text-transform:uppercase}.demo-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;color:#656d76;font-size:12px}.demo-row button{padding:6px 10px;border:1px solid #d1d9e0;border-radius:6px;background:#f6f8fa;color:#1f2328;font-size:12px;font-weight:600}.demo-row button:hover{background:#eaeef2}.terminal-hint{margin:0 0 18px}.sidebar{padding-top:38px}[data-theme="dark"] .workspace-label h1,[data-theme="dark"] .demo-row{color:#8b949e}[data-theme="dark"] .demo-row button{background:#21262d;border-color:#30363d;color:#e6edf3}[data-theme="dark"] .demo-row button:hover{background:#30363d}@media(max-width:700px){.workspace-label{padding:30px 0 20px}.sidebar{padding-top:36px}}
+/* Conflict preference */
+#settings-dialog .conflict-preference{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-top:20px;padding:14px;border:1px solid #d1d9e0;border-radius:6px;background:#f6f8fa}
+#settings-dialog .conflict-preference label{margin:0;font-size:13px;cursor:pointer}
+#settings-dialog .conflict-preference p{margin:5px 0 0;font-size:12px;line-height:1.45}
+#settings-dialog input.preference-toggle{appearance:none;position:relative;flex:none;width:36px;height:20px;padding:0;margin:0;border:0;border-radius:20px;background:#8c959f;cursor:pointer;transition:background .15s}
+#settings-dialog input.preference-toggle::before{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s}
+#settings-dialog input.preference-toggle:checked{background:#1f883d}
+#settings-dialog input.preference-toggle:checked::before{transform:translateX(16px)}
+#settings-dialog input.preference-toggle:focus-visible{outline:2px solid #0969da;outline-offset:3px}
+#conflict-dialog .text-button{padding:0;border:0;background:none;color:#0969da;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+[data-theme="dark"] #settings-dialog .conflict-preference{background:#0d1117;border-color:#30363d}
+[data-theme="dark"] #settings-dialog input.preference-toggle{background:#6e7681}
+[data-theme="dark"] #settings-dialog input.preference-toggle:checked{background:#238636}
+[data-theme="dark"] #conflict-dialog .text-button{color:#58a6ff}

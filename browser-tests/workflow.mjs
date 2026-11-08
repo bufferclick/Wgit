@@ -17,6 +17,8 @@ const seed = join(gitRoot, 'seed'); mkdirSync(seed);
 const run = (...args) => execFileSync('git', ['-C', seed, ...args], { stdio: 'ignore' });
 run('init', '-b', 'main'); run('config', 'user.name', 'Remote'); run('config', 'user.email', 'remote@example.com');
 writeFileSync(join(seed, 'README.md'), 'Remote README\n'); writeFileSync(join(seed, 'remote-only.txt'), 'Remote data\n');
+mkdirSync(join(seed, 'versions'));
+for (let i = 0; i < 19; i++) writeFileSync(join(seed, 'versions', `file-${i}.txt`), `Version 1: ${i}\n`);
 run('add', '.'); run('commit', '-m', 'Remote initial'); run('push', remoteDir, 'main');
 const browser = await chromium.launch({ executablePath, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
 const context = await browser.newContext({ colorScheme: 'light', viewport: { width: 1440, height: 900 } });
@@ -26,7 +28,7 @@ const errors = [];
 page.on('pageerror', error => errors.push(error.message));
 try {
   await page.goto(process.env.WGit_URL || 'http://localhost:4173/');
-  assert.match(await page.locator('.version-badge').textContent(), /v0\.0\.8/);
+  assert.match(await page.locator('.version-badge').textContent(), /v0\.0\.9/);
   assert.equal(await page.title(), 'Wgit');
   assert.ok((await page.locator('link[rel=icon]').getAttribute('href')).includes('favicon'));
   assert.match(await page.locator('footer').textContent(), /Made by Buffer/);
@@ -58,6 +60,8 @@ try {
       const file = await project.getFileHandle(name, { create: true });
       const writable = await file.createWritable(); await writable.write(data); await writable.close();
     }
+    const versions = await project.getDirectoryHandle('versions', { create: true });
+    for (let i = 0; i < 19; i++) { const file = await versions.getFileHandle(`file-${i}.txt`, { create: true }); const writer = await file.createWritable(); await writer.write(`Version 2: ${i}\n`); await writer.close(); }
     window.showDirectoryPicker = async () => project;
   });
   await page.locator('#open-folder').click();
@@ -91,7 +95,7 @@ try {
   assert.equal(await page.locator('#settings-name').inputValue(), 'Buffer');
   assert.equal(await page.locator('#settings-email').inputValue(), 'bufferclick@github.com');
   await page.locator('#cancel-settings').click();
-  await command('git add .', /Staged 2 files/);
+  await command('git add .', /Staged 21 files/);
   await command('git commit -m "First commit"', /First commit/);
   await command('git status', /working tree clean/);
   await command('git ls-files', /README\.md[\s\S]*game\.wasm/);
@@ -145,18 +149,49 @@ try {
   assert.equal(await page.locator('#conflict-path').textContent(), 'README.md');
   assert.match(await page.locator('#conflict-explanation').textContent(), /replace the version on GitHub after a successful push/);
   assert.match(await page.locator('#keep-local').textContent(), /Use my local file/);
-  await page.locator('#keep-local').click();
+  assert.equal(await page.locator('#settings-always-local').isChecked(), false);
+  await page.locator('#conflict-open-settings').click();
+  assert.equal(await page.locator('#settings-dialog').isVisible(), true);
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'settings-always-local');
+  await page.locator('#settings-always-local').check();
+  await page.locator('#cancel-settings').click();
+  assert.equal(await page.locator('#conflict-dialog').isVisible(), true);
+  assert.equal(await page.locator('#settings-always-local').isChecked(), true); // unsaved form state
+  await page.locator('#conflict-open-settings').click();
+  assert.equal(await page.locator('#settings-always-local').isChecked(), false); // cancel did not save
+  await page.locator('#settings-always-local').check();
+  await page.locator('#settings-form button[type=submit]').click();
   await page.waitForFunction(() => !document.querySelector('#command-input').disabled);
+  assert.equal(await page.locator('#conflict-dialog').isVisible(), false);
+  assert.equal((await page.locator('#terminal-output').textContent()).match(/Conflict: using local file for/g).length, 20);
   assert.match(await page.locator('#terminal-output .output-line').last().textContent(), /Synced origin\/main/);
+  const preferencePage = await context.newPage();
+  await preferencePage.goto(process.env.WGit_URL || 'http://localhost:4173/');
+  await preferencePage.locator('#open-settings').click();
+  assert.equal(await preferencePage.locator('#settings-always-local').isChecked(), true);
+  await preferencePage.locator('#cancel-settings').click();
+  await preferencePage.close();
   await command('git status', /working tree clean/);
   await command('git push -u origin main', /Pushed main.*set upstream/);
   assert.equal(execFileSync('git', ['--git-dir', remoteDir, 'show', 'main:README.md'], { encoding: 'utf8' }), 'Hello from Web-Git\n');
   assert.equal(execFileSync('git', ['--git-dir', remoteDir, 'show', 'main:remote-only.txt'], { encoding: 'utf8' }), 'Remote data\n');
+  for (let i = 0; i < 19; i++) assert.equal(execFileSync('git', ['--git-dir', remoteDir, 'show', `main:versions/file-${i}.txt`], { encoding: 'utf8' }), `Version 2: ${i}\n`);
   assert.ok(!(await page.locator('#terminal-output').textContent()).includes('dummy-test-token'));
   const storedConfig = await page.evaluate(async () => { const root = await navigator.storage.getDirectory(), project = await root.getDirectoryHandle('project'), gitdir = await project.getDirectoryHandle('.git'), config = await gitdir.getFileHandle('config'); return (await config.getFile()).text(); });
   assert.ok(!storedConfig.includes('dummy-test-token'));
   assert.match(storedConfig, /remote = origin/);
   assert.deepEqual(execFileSync('git', ['--git-dir', remoteDir, 'show', 'main:game.wasm']), Buffer.from([0, 97, 115, 109, 0, 1, 2]));
+  // Automatic local choice also includes tracked deletions when the remote changed the file.
+  run('fetch', remoteDir, 'main'); run('reset', '--hard', 'FETCH_HEAD');
+  writeFileSync(join(seed, 'versions', 'file-0.txt'), 'Changed on GitHub\n');
+  run('add', '.'); run('commit', '-m', 'Remote update'); run('push', remoteDir, 'main');
+  await page.evaluate(async () => { const root = await navigator.storage.getDirectory(), project = await root.getDirectoryHandle('project'), versions = await project.getDirectoryHandle('versions'); await versions.removeEntry('file-0.txt'); });
+  await command('wgit push main', /branch main after syncing/);
+  assert.match(await page.locator('#terminal-output').textContent(), /Conflict: using local deletion for versions\/file-0.txt/);
+  assert.equal(execFileSync('git', ['--git-dir', remoteDir, 'ls-tree', '-r', '--name-only', 'main'], { encoding: 'utf8' }).includes('versions/file-0.txt'), false);
+  await page.locator('#open-settings').click();
+  await page.locator('#settings-always-local').uncheck();
+  await page.locator('#settings-form button[type=submit]').click();
   await page.locator('#open-settings').click(); await page.locator('#clear-saved-token').click(); await page.locator('#cancel-settings').click();
   await input.fill('git push'); await input.press('Enter');
   await page.locator('#push-dialog').waitFor({ state: 'visible' });
@@ -171,7 +206,7 @@ try {
   await command('git log', /First commit/);
   await command('git branch feature', /Created branch feature/);
   await command('git switch feature', /Switched to branch/);
-  await command('git --version', /Wgit v0\.0\.8/);
+  await command('git --version', /Wgit v0\.0\.9/);
 
   // A real pointer drag selects terminal output, copies it and leaves it selected.
   const versionLine = page.locator('#terminal-output .output-line').last();
