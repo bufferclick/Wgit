@@ -4,15 +4,16 @@ const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers
 const respond = (status, value) => new Response(JSON.stringify(value), { status, headers: cors });
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const github = /^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/i;
-const releases = new Set(['pr-1','pr-2','pr-3','pr-4','pr-5','pr-6','pr-7','pr-8','pr-9','pr-11','pr-12','v0.1.3']);
+const releases = new Set(['pr-1','pr-2','pr-3','pr-4','pr-5','pr-6','pr-7','pr-8','pr-9','pr-11','pr-12','v0.1.3','v0.1.4']);
 const base = Deno.env.get('SUPABASE_URL'), key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'), salt = Deno.env.get('COMMUNITY_IP_SALT');
 const dbHeaders = { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
 const hash = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))), b => b.toString(16).padStart(2, '0')).join('');
 const validLogin = value => typeof value === 'string' && github.test(value) && !value.includes('--');
 async function rpc(name, body) {
   const r = await fetch(`${base}/rest/v1/rpc/${name}`, { method: 'POST', headers: dbHeaders, body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(`Database operation failed (${r.status})`);
-  return r.status === 204 ? null : r.json();
+  if (!r.ok) { const body = await r.json().catch(() => ({})); throw new Error(`Database operation ${name} failed (${r.status}, ${body.code || 'unknown'})`); }
+  if (r.status === 204) return null;
+  const text = await r.text(); return text ? JSON.parse(text) : null;
 }
 async function identity(req) {
   const bearer = req.headers.get('authorization') || '';
@@ -102,9 +103,12 @@ Deno.serve(async req => {
         const allowed = ['posts', 'votes', 'bans', 'limits', 'accounts'];
         if (!Array.isArray(input.categories) || !input.categories.length || input.categories.some(x => !allowed.includes(x)) || new Set(input.categories).size !== input.categories.length || JSON.stringify(input.confirmations) !== JSON.stringify(['reviewed', 'irreversible', 'DELETE SELECTED DATA'])) return respond(400, { error: 'Review all three confirmations and choose data to delete.' });
         const categories = input.categories.filter(x => x !== 'accounts');
-        try { if (categories.length) await rpc('community_wipe', { p_categories: categories }); if (input.categories.includes('accounts')) await wipeAccounts(); }
-        catch (error) { console.error('Partial wipe:', error); return respond(503, { error: 'The wipe did not finish. Some selected data may already be deleted; check Supabase before retrying.' }); }
-        return respond(200, { ok: true });
+        let deleted = {};
+        try { if (categories.length) { deleted = await rpc('community_wipe_v2', { p_categories: categories }); if (!deleted || categories.some(x => !Number.isSafeInteger(deleted[x]) || deleted[x] < 0)) throw new Error('Invalid database wipe response'); } }
+        catch (error) { console.error('Database wipe failed:', error); return respond(503, { error: 'Could not confirm database deletion. Selected app data may already be deleted; authentication accounts were not touched. Check Supabase and the Edge Function logs before retrying.' }); }
+        try { if (input.categories.includes('accounts')) deleted.accounts = await wipeAccounts(); }
+        catch (error) { console.error('Authentication wipe failed:', error); return respond(503, { error: 'Authentication deletion did not finish. Some accounts and selected app data may already be deleted; check Supabase before retrying.' }); }
+        return respond(200, { ok: true, deleted });
       }
       const email = typeof input.email === 'string' ? input.email.toLowerCase().trim() : '';
       const match = /^([a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?)@github\.com$/.exec(email);
