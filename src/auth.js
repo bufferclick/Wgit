@@ -7,7 +7,7 @@ export async function signIn() {
   const { error } = await supabase.auth.signInWithOAuth({ provider: 'github', options: { redirectTo } });
   if (error) throw error;
 }
-export async function signOut() { const { error } = await supabase.auth.signOut(); if (error) throw error; }
+export async function signOut() { const { error } = await supabase.auth.signOut(); if (error) throw error; try { sessionStorage.removeItem('wgit.github.provider'); } catch {} }
 export async function apiRequest(action, { method = 'GET', data, authenticated = true } = {}) {
   const t = authenticated ? await token() : '';
   if (authenticated && !t) throw new Error('Verify your GitHub account first.');
@@ -25,7 +25,18 @@ export async function connectRepositories() {
   const { error } = await supabase.auth.signInWithOAuth({ provider:'github', options:{ redirectTo, scopes:'repo read:user' } });
   if (error) throw error;
 }
-export async function providerToken() { const { data, error } = await supabase.auth.getSession(); if (error) throw error; return data.session?.provider_token || ''; }
+function rememberProvider(session) {
+  try {
+    if (!session?.user?.id) { sessionStorage.removeItem('wgit.github.provider'); return; }
+    if (session.provider_token) sessionStorage.setItem('wgit.github.provider', JSON.stringify({user:session.user.id, token:session.provider_token}));
+  } catch {}
+}
+supabase.auth.onAuthStateChange((_event, session) => { rememberProvider(session); });
+export async function providerToken() {
+  const { data, error } = await supabase.auth.getSession(); if (error) throw error;
+  const session=data.session; rememberProvider(session);
+  try { const saved=JSON.parse(sessionStorage.getItem('wgit.github.provider')); return saved?.user === session?.user?.id ? saved.token : (session?.provider_token || ''); } catch { return session?.provider_token || ''; }
+}
 export async function githubIdentity() {
   const { data, error } = await supabase.auth.getUser(); if (error) throw error;
   const identity = data.user?.identities?.find(i => i.provider === 'github');

@@ -3,8 +3,8 @@ import { githubUsername } from './identity.js';
 import { verifiedUser, signIn, signOut } from './auth.js';
 import * as git from 'isomorphic-git';
 import LightningFS from '@isomorphic-git/lightning-fs';
-import { createIcons, GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, CircleDot, Terminal, FolderOpen, Trash2, Command, Link, Folder, ArrowUpLeft, Settings, MessageSquare, History, Maximize2, Minimize2, Moon, Sun } from 'lucide';
-const icons = { GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, CircleDot, Terminal, FolderOpen, Trash2, Command, Link, Folder, ArrowUpLeft, Settings, MessageSquare, History, Maximize2, Minimize2, Moon, Sun };
+import { createIcons, GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, CircleDot, Terminal, FolderOpen, Trash2, Command, Link, Folder, ArrowUpLeft, Settings, MessageSquare, History, Maximize2, Minimize2, Moon, Sun, Bell, ChevronDown } from 'lucide';
+const icons = { GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, CircleDot, Terminal, FolderOpen, Trash2, Command, Link, Folder, ArrowUpLeft, Settings, MessageSquare, History, Maximize2, Minimize2, Moon, Sun, Bell, ChevronDown };
 import { nativeFS } from './native-fs.js';
 import { repositoryState, initRepository, incompleteMessage } from './repository.js';
 import { remoteCommand, preparePush, pushBranch } from './remotes.js';
@@ -12,6 +12,7 @@ import { prepareSync, syncBranch } from './sync.js';
 import { prepareAutoPush, autoPush } from './auto-push.js';
 import { readTextFile } from './cat.js';
 import { mountTools } from './workspace-tools.js';
+import { saveHandle, loadHandle, saveState, loadState } from './workspace-session.js';
 import { version } from '../package.json';
 import gitIcon from '../favicon.svg';
 import './style.css';
@@ -23,21 +24,23 @@ document.querySelector('#app').innerHTML = `
   <div class="top-right"><span class="open-source">Open source &amp; free</span><button class="theme-button" id="theme-toggle" type="button" aria-label="Switch to dark mode" title="Switch theme">${icon('moon')}</button><button class="settings-button" id="open-settings">${icon('settings')} Settings</button><a class="github-top" href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">${icon('github')} <span>View on GitHub</span> ${icon('arrow-up-right', 'external')}</a></div>
 </header>
 <div class="repo-head"><div class="repo-title"><div class="repo-icon">${icon('book-marked')}</div><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">bufferclick</a><span class="slash">/</span><strong>Wgit</strong><span class="public-pill">Public</span></div></div>
-<nav class="tabs" aria-label="Project navigation"><div class="tabs-inner"><a class="tab active" href="/">${icon('code-xml')} Workspace</a><a class="tab" href="/community">${icon('message-square')} Community</a><a class="tab" href="/notifications">Notifications</a><a class="tab" href="/logs">${icon('history')} Logs</a></div></nav>
+<nav class="tabs" aria-label="Project navigation"><div class="tabs-inner"><a class="tab active" href="/">${icon('code-xml')} Workspace</a><a class="tab" href="/community">${icon('message-square')} Community</a><a class="tab" href="/notifications">${icon('bell')} Notifications</a><a class="tab" href="/logs">${icon('history')} Logs</a></div></nav>
 <main id="workspace" class="layout">
   <section class="main-column">
     <div class="workspace-label"><img src="${gitIcon}" alt="" /><h1>Browser-based Git workspace</h1></div>
     <div class="panel folder-panel"><div class="folder-illustration">${icon('folder-open')}</div><div class="folder-copy"><div class="folder-title" id="folder-title">Open a project folder</div><div class="folder-description" id="folder-description">Choose a local folder to use with Git.</div></div><button class="button primary" id="open-folder">${icon('folder-open')} Open folder</button></div>
     <div class="terminal panel"><div class="terminal-top"><div class="terminal-title">${icon('terminal')} <strong>Terminal</strong><span class="terminal-divider"></span><span>Wgit shell</span></div><div class="terminal-actions"><span id="copy-state" role="status" aria-live="polite">Select text to copy</span><button id="fullscreen-terminal" class="icon-button" title="Expand terminal" aria-label="Expand terminal">${icon('maximize-2')}</button><button id="clear-terminal" class="icon-button" title="Clear terminal" aria-label="Clear terminal">${icon('trash-2')}</button></div></div><div class="terminal-body" id="terminal-body"><div class="terminal-welcome"><div class="terminal-hint">Open a folder or type <span>help</span> for commands.</div></div><div id="terminal-output" aria-live="polite"></div><form id="terminal-form" autocomplete="off"><label for="command-input" class="prompt"><svg class="prompt-git" viewBox="0 0 32 32" aria-hidden="true"><path fill="#3fb950" d="M14.59 1.17a2 2 0 0 1 2.82 0l13.42 13.42a2 2 0 0 1 0 2.82L17.41 30.83a2 2 0 0 1-2.82 0L1.17 17.41a2 2 0 0 1 0-2.82z"/><path d="M9.3 5.9 13.1 9.7v8.2m0-8.2 7.2 7.2" fill="none" stroke="#0d1117" stroke-width="2.1" stroke-linecap="round"/><circle cx="13.1" cy="9.7" r="2.1" fill="#0d1117"/><circle cx="13.1" cy="19.2" r="2.1" fill="#0d1117"/><circle cx="21.1" cy="17.7" r="2.1" fill="#0d1117"/></svg> <span class="prompt-path" id="prompt-path">$</span></label><input id="command-input" aria-label="Terminal command" spellcheck="false" placeholder="Type a command..." /></form></div><div class="terminal-bottom"><span>${icon('command')} Wgit shell <span class="terminal-shortcut">· ↑ ↓ command history</span></span><span>Type <kbd>help</kbd> for a list of commands</span></div></div>
+    <div class="repository-selector"><button id="select-github-repo" type="button" aria-label="Select GitHub repository">${icon('github')} <span id="selected-repo-label">Select GitHub repository</span> ${icon('chevron-down')}</button><span class="repo-picker-hint">Choose a remote for this folder</span></div>
     <div class="demo-row"><span>Demo project: Wgit files · stored in browser only</span><button id="try-demo" type="button">Open demo</button></div>
   </section>
-  <aside class="sidebar"><div class="about"><h2>About Wgit</h2><p>Wgit (Web-Git) runs Git commands in your browser.</p><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">${icon('link')} github.com/bufferclick/Wgit</a></div><div class="side-section"><h3>YOUR WORKSPACE</h3><div class="side-status"><div class="side-icon">${icon('folder')}</div><div><strong id="side-folder">No folder selected</strong><p id="side-detail">Open a folder to get started</p></div></div><div class="side-meta"><span>${icon('git-branch')} Branch</span><strong id="branch-label">—</strong></div><div class="side-meta"><span>${icon('circle-dot')} Status</span><strong id="status-label">Not connected</strong></div></div><div class="side-section commands"><div class="side-heading"><h3>QUICK COMMANDS</h3><span>Click to insert</span></div><button data-command="git init"><code>git init</code>${icon('arrow-up-left')}</button><button data-command="git status"><code>git status</code>${icon('arrow-up-left')}</button><button data-command="git add ."><code>git add .</code>${icon('arrow-up-left')}</button><button data-command="git commit -m &quot;First commit&quot;"><code>git commit -m "..."</code>${icon('arrow-up-left')}</button><button data-command="git log"><code>git log</code>${icon('arrow-up-left')}</button><button data-command="git remote -v"><code>git remote -v</code>${icon('arrow-up-left')}</button><button data-command="git push -u origin main"><code>git push -u origin main</code>${icon('arrow-up-left')}</button><button data-command="wgit push main"><code>wgit push main</code>${icon('arrow-up-left')}</button></div></aside>
+  <aside class="sidebar"><div class="about"><h2>About Wgit</h2><p>Wgit (Web-Git) runs Git commands in your browser.</p><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">${icon('link')} github.com/bufferclick/Wgit</a></div><div class="side-section"><h3>YOUR WORKSPACE</h3><div class="side-status"><div class="side-icon">${icon('folder')}</div><div><strong id="side-folder">No folder selected</strong><p id="side-detail">Open a folder to get started</p></div></div><div class="side-meta"><span>${icon('git-branch')} Branch</span><strong id="branch-label">—</strong></div><div class="side-meta"><span>${icon('circle-dot')} Status</span><strong id="status-label">Not connected</strong></div></div><div class="side-section commands"><div class="side-heading"><h3>WORKSPACE TOOLS</h3></div><div class="tool-grid"></div></div></aside>
 </main><dialog id="settings-dialog" aria-labelledby="settings-title"><form id="settings-form"><h2 id="settings-title">Settings</h2><p>Default commit identity for projects in this browser. A repository's own Git config takes precedence.</p><label for="settings-name">Name</label><input id="settings-name" autocomplete="off" /><label for="settings-email">GitHub email</label><input id="settings-email" type="email" autocomplete="off" placeholder="username@github.com" /><p class="dialog-note">Use your GitHub username followed by @github.com.</p><label for="settings-token">GitHub personal access token</label><input id="settings-token" type="password" autocomplete="new-password" spellcheck="false" placeholder="Leave blank to keep existing token" /><p id="token-status" class="dialog-note"></p><p class="dialog-note warning-note">If saved, the token is stored unencrypted in this browser. Anyone with access to this browser profile, developer tools, extensions, or a compromised site can read it. Only save it on a trusted device. Pushes send it through this site's GitHub relay.</p><a href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens" target="_blank" rel="noopener noreferrer">GitHub token permissions ↗</a><div class="auth-settings"><strong>GitHub verification</strong><p id="auth-status">Checking sign-in…</p><button id="auth-login" type="button" class="button">Verify with GitHub</button><button id="auth-logout" type="button" class="button" hidden>Sign out</button></div><div class="conflict-preference"><div><label for="settings-always-local">Always use local for conflicts</label><p id="conflict-preference-description">Applies to all repositories in this browser. Conflicting GitHub files will be replaced by your local files or deletions after a successful push.</p></div><input id="settings-always-local" class="preference-toggle" type="checkbox" role="switch" aria-describedby="conflict-preference-description" /></div><p id="settings-error" class="settings-error" role="alert"></p><div class="dialog-actions"><button type="button" id="clear-saved-token" class="button">Remove saved token</button><button type="button" id="cancel-settings" class="button">Cancel</button><button type="submit" class="button primary">Save settings</button></div></form></dialog><dialog id="conflict-dialog" aria-labelledby="conflict-title"><h2 id="conflict-title">Choose a version</h2><p>Both your project and GitHub changed <strong id="conflict-path"></strong>. Choose which version to include in the merged project.</p><p class="conflict-explanation" id="conflict-explanation"></p><p class="conflict-settings-hint">You can choose to always pick local in <button type="button" id="conflict-open-settings" class="text-button">Settings</button>.</p><div class="dialog-actions"><button type="button" id="cancel-sync" class="button">Cancel sync</button><button type="button" id="keep-remote" class="button"></button><button type="button" id="keep-local" class="button primary"></button></div></dialog><dialog id="push-dialog" aria-labelledby="push-title"><form id="push-form"><h2 id="push-title">Connect to GitHub</h2><p><span id="auth-action">Push</span> <strong id="push-branch"></strong> to <strong id="push-target"></strong>.</p><label for="github-token">GitHub personal access token</label><input id="github-token" type="password" required autocomplete="off" spellcheck="false" placeholder="Paste token here" /><p class="dialog-note">Use a fine-grained token with repository Contents read and write access. It is sent through this site's GitHub-only relay to GitHub, and is not saved by Wgit. Never enter it in the terminal.</p><a href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens" target="_blank" rel="noopener noreferrer">How to create a token ↗</a><div class="dialog-actions"><button type="button" id="cancel-push" class="button">Cancel</button><button type="submit" class="button primary">Push to GitHub</button></div></form></dialog><footer><div><span class="footer-logo">${icon('git-branch')}</span> <strong>Wgit</strong><span>Made by Buffer</span><span>© 2026 Wgit contributors</span></div><div><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">GitHub ${icon('arrow-up-right')}</a></div></footer>`;
 createIcons({ icons });
 
 const $ = s => document.querySelector(s);
 const input = $('#command-input'), output = $('#terminal-output'), body = $('#terminal-body');
 let fs = null, cwd = '/workspace', rootName = '', repo = null, history = [], historyIndex = 0, busy = false;
+let workspaceType = null, restoringWorkspace = false;
 const pfs = () => fs.promises;
 const themeToggle = $('#theme-toggle');
 function setTheme(theme, persist = false) {
@@ -113,6 +116,8 @@ async function findRepo() { if (!fs) return null; let path = cwd; while (path ==
 async function refresh() {
   $('#prompt-path').textContent = fs ? displayPath(cwd).replace(/^~/, '$') : '$';
   repo = await findRepo();
+  const remoteLabel = $('#selected-repo-label'); remoteLabel.textContent = 'Select GitHub repository';
+  if (repo) { try { const origin = (await git.listRemotes({fs,dir:repo})).find(r => r.remote === 'origin'); if (origin) { const u = new URL(origin.url); if (u.hostname === 'github.com' && !u.username && !u.password) remoteLabel.textContent = u.pathname.replace(/^\//, '').replace(/\.git\/?$/, ''); } } catch {} }
   $('#branch-label').textContent = '—';
   $('#status-label').textContent = fs ? 'No repository' : 'Not connected';
   if (repo) {
@@ -121,26 +126,28 @@ async function refresh() {
     try { const matrix = await git.statusMatrix({ fs, dir: repo }); const count = matrix.filter(([,h,w,s]) => h !== w || h !== s).length; $('#status-label').textContent = count ? `${count} changed ${count === 1 ? 'file' : 'files'}` : 'Clean'; } catch { $('#status-label').textContent = 'Repository open'; }
   }
 }
-async function setWorkspace(newFs, name, demo = false) {
-  fs = newFs; cwd = '/workspace'; rootName = name;
+async function setWorkspace(newFs, name, demo = false, options = {}) {
+  fs = newFs; cwd = options.cwd || '/workspace'; rootName = name; workspaceType = demo ? 'demo' : 'folder';
+  $('#reconnect-folder')?.remove();
   $('#folder-title').textContent = name;
   $('#folder-description').textContent = demo ? 'A sandbox saved in this browser. Your local files are untouched.' : 'Local folder connected. Commands run directly on your files.';
   $('#side-folder').textContent = name; $('#side-detail').textContent = demo ? 'Browser demo workspace' : 'Local folder connected';
   $('#open-folder').innerHTML = `${icon('folder-open')} Change folder`; createIcons({ icons });
-  print(`Opened ${demo ? 'demo workspace' : 'folder'}: ${name}`, 'success'); await refresh(); input.focus();
+  if (!options.silent) print(`Opened ${demo ? 'demo workspace' : 'folder'}: ${name}`, 'success'); await refresh(); if (!options.silent) input.focus();
 }
-$('#open-folder').addEventListener('click', async () => {
-  if (busy) return;
+async function chooseFolder() {
+  if (busy || restoringWorkspace) return;
   if (!window.showDirectoryPicker) { print('Folder access is not supported in this browser. Try a Chromium-based browser, or use the demo workspace.', 'error'); input.focus(); return; }
-  try { const handle = await window.showDirectoryPicker({ mode: 'readwrite' }); await setWorkspace(nativeFS(handle), handle.name); }
+  try { const handle = await window.showDirectoryPicker({ mode: 'readwrite' }); try { await saveHandle(handle); } catch {} await setWorkspace(nativeFS(handle), handle.name); }
   catch (e) { if (e.name !== 'AbortError') print(`Could not open folder: ${e.message}`, 'error'); }
-});
+}
+$('#open-folder').addEventListener('click', chooseFolder);
 $('#try-demo').addEventListener('click', async () => {
-  if (busy) return;
+  if (busy || restoringWorkspace) return;
   try { const demoFS = new LightningFS('wgit-demo-wgit'); const { openDemo } = await import('./demo.js'); await openDemo(demoFS); await setWorkspace(demoFS, 'Wgit (demo)', true); }
   catch (e) { print(`Could not open demo: ${e.message}`, 'error'); }
 });
-$('#clear-terminal').addEventListener('click', () => { output.replaceChildren(); input.focus(); });
+$('#clear-terminal').addEventListener('click', () => { output.replaceChildren(); rememberWorkspace(); input.focus(); });
 document.querySelectorAll('[data-command]').forEach(button => button.addEventListener('click', () => { input.value = button.dataset.command; input.focus(); }));
 // Preserve selected text: focusing the input on every click used to clear it.
 body.addEventListener('click', event => {
@@ -332,10 +339,77 @@ $('#terminal-form').addEventListener('submit', e => {
 mountTools({
   getState: () => ({ fs, repo, cwd, name: rootName }), identity, refresh,
   insertCommand: value => { input.value = value; input.focus(); },
-  openDemo: () => $('#try-demo').click(), openFolder: () => $('#open-folder').click(),
+  openDemo: () => $('#try-demo').click(), openFolder: () => ($('#open-folder') || $('#reconnect-folder'))?.click(),
   exclusive: async fn => {
     if (busy) throw new Error('Wait for the current command or operation to finish.');
     busy = true;
     try { return await fn(); } finally { busy = false; if (commandQueue.length) void runQueue(); }
   }
 });
+
+// Keep the current tab's workspace and terminal when navigating to Community,
+// Logs or Notifications. Directory permissions are never silently requested.
+const savedWorkspace = loadState();
+function validWorkspacePath(path) {
+  return typeof path === 'string' && (path === '/workspace' || path.startsWith('/workspace/')) && !path.split('/').some(part => part === '.' || part === '..');
+}
+function rememberWorkspace() {
+  let remaining = 250000;
+  const lines = [];
+  for (const item of [...output.children].slice(-250).reverse()) {
+    const text = (item.querySelector('.file-output-content')?.textContent ?? item.textContent ?? '').slice(0, Math.min(remaining, 100000));
+    const file = item.classList.contains('file-output');
+    if (!remaining || (!text && !file)) continue;
+    remaining -= text.length;
+    const heading = file ? item.querySelector('.file-output-heading')?.children[1]?.textContent || 'File' : '';
+    lines.push({ text, file, heading, type: item.classList.contains('error') ? 'error' : item.classList.contains('success') ? 'success' : item.classList.contains('entered') ? 'entered' : '' });
+  }
+  saveState({type:workspaceType, name:rootName, cwd:validWorkspacePath(cwd)?cwd:'/workspace', history:history.slice(-200).map(line => line.slice(0,4000)), input:input.value.slice(0,4000), lines:lines.reverse()});
+}
+window.addEventListener('pagehide', rememberWorkspace);
+async function restoreWorkspace(state) {
+  if (!state || !['demo','folder'].includes(state.type)) return;
+  restoringWorkspace = true;
+  try {
+    let restoredFs;
+    if (state.type === 'demo') { restoredFs = new LightningFS('wgit-demo-wgit'); const { openDemo } = await import('./demo.js'); await openDemo(restoredFs); }
+    else {
+      workspaceType = 'folder'; rootName = state.name || ''; cwd = validWorkspacePath(state.cwd) ? state.cwd : '/workspace';
+      const handle = await loadHandle();
+      if (!handle) throw new Error('Choose your folder again to reconnect the workspace.');
+      const permission = handle.queryPermission ? await handle.queryPermission({mode:'readwrite'}) : 'prompt';
+      if (permission !== 'granted') {
+        workspaceType = 'folder'; rootName = state.name || handle.name;
+        $('#folder-title').textContent = rootName;
+        $('#folder-description').textContent = 'Reconnect this folder to continue your workspace.';
+        $('#side-folder').textContent = rootName; $('#side-detail').textContent = 'Permission needed to reconnect';
+        const reconnect = document.createElement('button'); reconnect.type='button'; reconnect.className='button primary'; reconnect.textContent='Reconnect folder';
+        reconnect.id='reconnect-folder'; $('#open-folder').before(reconnect); $('#open-folder').innerHTML=`${icon('folder-open')} Choose another folder`; createIcons({icons});
+        reconnect.addEventListener('click', async function reconnectHandler() {
+          try {
+            if (!handle.requestPermission || await handle.requestPermission({mode:'readwrite'}) !== 'granted') throw new Error('Folder permission was not granted.');
+            reconnect.removeEventListener('click', reconnectHandler);
+            await setWorkspace(nativeFS(handle),rootName,false,{cwd:validWorkspacePath(state.cwd)?state.cwd:'/workspace',silent:true});
+          } catch(error) { print(`Could not reconnect folder: ${error.message}`, 'error'); }
+        });
+        return;
+      }
+      restoredFs = nativeFS(handle);
+    }
+    let path = validWorkspacePath(state.cwd) ? state.cwd : '/workspace';
+    try { if (!(await restoredFs.promises.stat(path)).isDirectory()) path='/workspace'; } catch { path='/workspace'; }
+    await setWorkspace(restoredFs, state.name || (state.type==='demo'?'Wgit (demo)':'Workspace'), state.type==='demo', {cwd:path,silent:true});
+  } catch(error) { print(`Could not restore the workspace: ${error.message}`, 'error'); }
+  finally { restoringWorkspace = false; }
+}
+if (savedWorkspace) {
+  history = Array.isArray(savedWorkspace.history) ? savedWorkspace.history.filter(x=>typeof x==='string').slice(-200) : [];
+  historyIndex = history.length;
+  if (typeof savedWorkspace.input === 'string') input.value=savedWorkspace.input.slice(0,4000);
+  if (Array.isArray(savedWorkspace.lines)) for (const line of savedWorkspace.lines.slice(-250)) {
+    if (typeof line?.text !== 'string') continue;
+    if (line.file) printFile(String(line.heading || 'File').slice(0,300),line.text.slice(0,100000));
+    else print(line.text.slice(0,100000), ['error','success','entered'].includes(line.type)?line.type:'');
+  }
+  void restoreWorkspace(savedWorkspace);
+}
