@@ -1,8 +1,8 @@
 import './polyfills.js';
 import * as git from 'isomorphic-git';
 import LightningFS from '@isomorphic-git/lightning-fs';
-import { createIcons, GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, CircleDot, Terminal, FolderOpen, Trash2, Command, Link, Folder, ArrowUpLeft, Settings, Maximize2, Minimize2, Moon, Sun } from 'lucide';
-const icons = { GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, CircleDot, Terminal, FolderOpen, Trash2, Command, Link, Folder, ArrowUpLeft, Settings, Maximize2, Minimize2, Moon, Sun };
+import { createIcons, GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, CircleDot, Terminal, FolderOpen, Trash2, Command, Link, Folder, ArrowUpLeft, Settings, MessageSquare, Maximize2, Minimize2, Moon, Sun } from 'lucide';
+const icons = { GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, CircleDot, Terminal, FolderOpen, Trash2, Command, Link, Folder, ArrowUpLeft, Settings, MessageSquare, Maximize2, Minimize2, Moon, Sun };
 import { nativeFS } from './native-fs.js';
 import { repositoryState, initRepository, incompleteMessage } from './repository.js';
 import { remoteCommand, preparePush, pushBranch } from './remotes.js';
@@ -20,7 +20,7 @@ document.querySelector('#app').innerHTML = `
   <div class="top-right"><span class="open-source">Open source &amp; free</span><button class="theme-button" id="theme-toggle" type="button" aria-label="Switch to dark mode" title="Switch theme">${icon('moon')}</button><button class="settings-button" id="open-settings">${icon('settings')} Settings</button><a class="github-top" href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">${icon('github')} <span>View on GitHub</span> ${icon('arrow-up-right', 'external')}</a></div>
 </header>
 <div class="repo-head"><div class="repo-title"><div class="repo-icon">${icon('book-marked')}</div><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">bufferclick</a><span class="slash">/</span><strong>Wgit</strong><span class="public-pill">Public</span></div></div>
-<nav class="tabs" aria-label="Project navigation"><div class="tabs-inner"><a class="tab active" href="#workspace">${icon('code-xml')} Workspace</a></div></nav>
+<nav class="tabs" aria-label="Project navigation"><div class="tabs-inner"><a class="tab active" href="/">${icon('code-xml')} Workspace</a><a class="tab" href="/community">${icon('message-square')} Community</a></div></nav>
 <main id="workspace" class="layout">
   <section class="main-column">
     <div class="workspace-label"><img src="${gitIcon}" alt="" /><h1>Browser-based Git workspace</h1></div>
