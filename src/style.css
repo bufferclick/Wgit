@@ -41,3 +41,5 @@
 [data-theme="dark"] #settings-dialog input.preference-toggle{background:#6e7681}
 [data-theme="dark"] #settings-dialog input.preference-toggle:checked{background:#238636}
 [data-theme="dark"] #conflict-dialog .text-button{color:#58a6ff}
+
+.prompt-git{width:13px;height:13px;vertical-align:-2px;stroke:none}
