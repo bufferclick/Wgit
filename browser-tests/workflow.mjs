@@ -28,7 +28,7 @@ const errors = [];
 page.on('pageerror', error => errors.push(error.message));
 try {
   await page.goto(process.env.WGit_URL || 'http://localhost:4173/');
-  assert.match(await page.locator('.version-badge').textContent(), /v0\.1\.5/);
+  assert.match(await page.locator('.version-badge').textContent(), /v0\.1\.6/);
   assert.equal(await page.title(), 'Wgit');
   assert.equal(await page.locator('#prompt-path').textContent(), '$');
   assert.equal(await page.locator('.prompt-git').count(), 1);
@@ -40,7 +40,7 @@ try {
   assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
   assert.equal(await page.locator('#theme-toggle').getAttribute('aria-label'), 'Switch to light mode');
   assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor), 'rgb(13, 17, 23)');
-  const themePage = await context.newPage(); await themePage.goto(process.env.WGit_URL || 'http://localhost:4173/');
+  const themePage = await context.newPage(); await themePage.goto(process.env.WGit_URL || 'http://localhost:4173/'); await themePage.locator('#theme-toggle').waitFor();
   assert.equal(await themePage.locator('html').getAttribute('data-theme'), 'dark');
   await themePage.setViewportSize({ width: 390, height: 844 });
   assert.equal(await themePage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
@@ -213,7 +213,7 @@ try {
   await command('git log', /First commit/);
   await command('git branch feature', /Created branch feature/);
   await command('git switch feature', /Switched to branch/);
-  await command('git --version', /Wgit v0\.1\.5/);
+  await command('git --version', /Wgit v0\.1\.6/);
 
   // A real pointer drag selects terminal output, copies it and leaves it selected.
   const versionLine = page.locator('#terminal-output .output-line').last();

@@ -9,15 +9,14 @@ import { lessons } from './lessons.js';
 const el = (tag, cls, text) => { const n=document.createElement(tag); if(cls)n.className=cls; if(text!==undefined)n.textContent=text; return n; };
 const button = (text, fn, cls='tool-button') => { const b=el('button',cls,text); b.type='button'; b.addEventListener('click',fn); return b; };
 export function mountTools({ getState, exclusive, refresh, identity, insertCommand, openDemo, openFolder }) {
-  const wrapper=el('section','workspace-tools'); wrapper.innerHTML=`<div class="tool-heading"><div><span>WORKSPACE TOOLS</span><h2>Everything in one place</h2></div><p>Explore, review and learn.</p></div><div class="tool-grid"></div>`;
-  document.querySelector('.demo-row').after(wrapper);
+  const wrapper = document.querySelector('.commands');
   const dialog=el('dialog','tool-dialog'); dialog.innerHTML=`<div class="tool-dialog-head"><div><span class="tool-eyebrow">WGIT WORKSPACE</span><h2 id="tool-title"></h2></div><button class="tool-close" aria-label="Close">×</button></div><p id="tool-status" role="status" aria-live="polite"></p><div id="tool-content"></div>`; document.body.append(dialog);
   const content=dialog.querySelector('#tool-content'), status=dialog.querySelector('#tool-status'), title=dialog.querySelector('#tool-title'); dialog.querySelector('.tool-close').onclick=()=>dialog.close();
   function show(name) { title.textContent=name; status.textContent=''; content.replaceChildren(); if(!dialog.open)dialog.showModal(); }
   function message(text, error=false) { status.textContent=text; status.classList.toggle('tool-error',error); }
   async function act(fn) { try { message('Working…'); await exclusive(fn); if(status.textContent==='Working…')message(''); } catch(e) { message(e.message || 'Something went wrong.',true); } }
   function workspace(requireRepo=false) { const s=getState(); if(!s.fs)throw new Error('Open a folder or the demo first.'); if(requireRepo && !s.repo)throw new Error('Initialize a Git repository first.'); return s; }
-  function addAction(name, desc, open) { const card=button('',open,'tool-card'); card.append(el('strong','',name),el('span','',desc),el('b','','↗')); wrapper.querySelector('.tool-grid').append(card); }
+  function addAction(name, desc, open) { const card=button('',open,'tool-card'); card.title=desc; card.append(el('strong','',name),el('b','','↗')); wrapper.querySelector('.tool-grid').append(card); }
   async function browse(path='/workspace') {
     const s=workspace(); content.replaceChildren(); const bar=el('div','tool-bar'); bar.append(el('strong','',path.replace('/workspace',s.name))); if(path!=='/workspace')bar.append(button('← Parent',()=>act(()=>browse(path.slice(0,path.lastIndexOf('/')))))); content.append(bar);
     const names=(await s.fs.promises.readdir(path)).filter(n=>n!=='.git').sort(); if(!names.length) content.append(el('p','tool-muted','This folder is empty.'));
@@ -65,11 +64,12 @@ export function mountTools({ getState, exclusive, refresh, identity, insertComma
     const token=await providerToken(); content.append(button(token?'Reconnect GitHub with repository access':'Connect GitHub for repository access',()=>{if(confirm('GitHub will request repo access, including write access to private repositories. Continue?')) { try { sessionStorage.setItem('wgit.open-repo-picker','1'); } catch {} connectRepositories().catch(e=>message(e.message,true)); }}));
     if(!token){content.append(el('p','tool-empty','Connect to load repositories.'));return;}
     let repos; try{repos=await listGithubRepos(token,page);}catch(e){content.append(el('p','tool-error',e.message));return;}
-    content.append(el('p','tool-muted',`Page ${page} · selecting a repository sets origin; it does not upload or clone.`));
-    for(const r of repos) content.append(button(`${r.name} ${r.private?'· private':'· public'}`,()=>act(async()=>{const {fs,repo}=workspace(true),opts={fs,dir:repo}; const old=(await git.listRemotes(opts)).find(x=>x.remote==='origin'); if(old && await git.getConfig({...opts,path:'remote.origin.pushurl'})) throw new Error('Origin has a separate push URL. Remove it explicitly before changing origin.'); if(old&&!confirm(`Replace the existing origin with ${r.url}? This does not push or change files.`))return; if(old) await git.setConfig({...opts,path:'remote.origin.url',value:r.url}); else await git.addRemote({...opts,remote:'origin',url:r.url}); message(`Origin set to ${r.url}.`);}), 'tool-row'));
+    if (repos.scopes !== null && !repos.scopes.split(',').map(x=>x.trim()).includes('repo')) content.append(el('p','tool-error','Private repository access is not granted. Reconnect GitHub above and approve the repo permission.'));
+    content.append(el('p','tool-muted',`Page ${page} · ${repos.length} repositories. Private repositories are included when GitHub has granted repo access. Selecting one sets origin; it does not upload or clone.`));
+    for(const r of repos) content.append(button(`${r.name} ${r.private?'· private':'· public'}`,()=>act(async()=>{const {fs,repo}=workspace(true),opts={fs,dir:repo}; const old=(await git.listRemotes(opts)).find(x=>x.remote==='origin'); if(old && await git.getConfig({...opts,path:'remote.origin.pushurl'})) throw new Error('Origin has a separate push URL. Remove it explicitly before changing origin.'); if(old&&!confirm(`Replace the existing origin with ${r.url}? This does not push or change files.`))return; if(old) await git.setConfig({...opts,path:'remote.origin.url',value:r.url}); else await git.addRemote({...opts,remote:'origin',url:r.url}); await refresh(); dialog.close();}), 'tool-row'));
     const pages=el('div','tool-bar');if(page>1)pages.append(button('← Previous',()=>act(()=>repoPicker(page-1))));if(repos.length===50)pages.append(button('Next →',()=>act(()=>repoPicker(page+1))));content.append(pages);
   }
-  addAction('GitHub repos','Choose an OAuth-connected remote',()=>{show('GitHub repositories');act(()=>repoPicker());});
+  document.querySelector('#select-github-repo').addEventListener('click',()=>{show('GitHub repositories');act(()=>repoPicker());});
   async function snapshotsView() {
     const s=workspace();content.replaceChildren();content.append(el('p','tool-muted','Browser-local and unencrypted, including ignored files and secrets; .git is excluded. Maximum 500 files / 20 MiB per snapshot. Clearing browser storage deletes snapshots.'));
     content.append(button('Create snapshot',()=>act(async()=>{if(!confirm(`Save a snapshot of ${s.name} in this browser? It may include sensitive files.`))return;const snap=await createSnapshot(s.fs,s.name);await snapshotsView();message(`Saved ${snap.files.length} files.`);}),'button primary'));
