@@ -1,4 +1,8 @@
-if (/^\/community(?:\/|$)/.test(window.location.pathname)) {
+if (window.location.pathname === '/settings/admin') {
+  import('./admin.js');
+} else if (window.location.pathname === '/logs') {
+  import('./logs.js');
+} else if (/^\/community(?:\/|$)/.test(window.location.pathname)) {
   import('./community.js');
 } else {
   import('./main.js');

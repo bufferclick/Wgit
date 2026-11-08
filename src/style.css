@@ -43,3 +43,5 @@
 [data-theme="dark"] #conflict-dialog .text-button{color:#58a6ff}
 
 .prompt-git{width:13px;height:13px;vertical-align:-2px;stroke:none}
+
+#settings-dialog .auth-settings{margin-top:20px;padding-top:16px;border-top:1px solid #d1d9e0}#settings-dialog .auth-settings strong{font-size:13px}#settings-dialog .auth-settings p{margin:6px 0 10px;font-size:12px}#settings-dialog .auth-settings .button{background:#f6f8fa;color:#1f2328}[data-theme="dark"] #settings-dialog .auth-settings{border-color:#30363d}[data-theme="dark"] #settings-dialog .auth-settings .button{background:#21262d;color:#e6edf3}

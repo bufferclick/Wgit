@@ -1,31 +1,30 @@
-import { createIcons, GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, MessageSquare, Moon, Sun, ArrowLeft, Lightbulb } from 'lucide';
+import { createIcons, GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, MessageSquare, History, Moon, Sun, ArrowLeft, Lightbulb } from 'lucide';
 import { version } from '../package.json';
 import './style.css';
 import './community.css';
-import { githubUsername } from './identity.js';
+import { verifiedUser, signIn, signOut, apiRequest } from './auth.js';
 import { communityApi as api, cachedCommunity, fetchCommunity } from './community-data.js';
 
-const icons = { GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, MessageSquare, Moon, Sun, ArrowLeft, Lightbulb };
+const icons = { GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, MessageSquare, History, Moon, Sun, ArrowLeft, Lightbulb };
 const icon = name => `<i data-lucide="${name}"></i>`;
 const app = document.querySelector('#app');
 app.innerHTML = `
 <header class="topbar"><div class="top-left"><a class="brand-mark" href="/" aria-label="Wgit home">${icon('git-branch')}</a><span class="top-divider"></span><span class="top-product">Wgit <span class="version-badge">v${version}</span></span><span class="top-slash">/</span><span class="top-context">community</span></div><div class="top-right"><span class="open-source">Open source &amp; free</span><button class="theme-button" id="theme-toggle" type="button" aria-label="Switch theme">${icon('moon')}</button><a class="github-top" href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">${icon('github')} <span>View on GitHub</span> ${icon('arrow-up-right')}</a></div></header>
 <div class="repo-head"><div class="repo-title"><div class="repo-icon">${icon('book-marked')}</div><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">bufferclick</a><span class="slash">/</span><strong>Wgit</strong><span class="public-pill">Public</span></div></div>
-<nav class="tabs" aria-label="Project navigation"><div class="tabs-inner"><a class="tab" href="/">${icon('code-xml')} Workspace</a><a class="tab active" href="/community" aria-current="page">${icon('message-square')} Community</a></div></nav>
+<nav class="tabs" aria-label="Project navigation"><div class="tabs-inner"><a class="tab" href="/">${icon('code-xml')} Workspace</a><a class="tab active" href="/community" aria-current="page">${icon('message-square')} Community</a><a class="tab" href="/logs">${icon('history')} Logs</a></div></nav>
 <main class="layout community-layout"><section class="community-main"><div class="community-heading"><div><p class="community-eyebrow">WGIT COMMUNITY</p><h1>Discussions</h1><p>Share ideas and discuss what you'd like to see in Wgit.</p></div><button class="button primary" id="new-discussion" type="button">New discussion</button></div>
-<div id="community-status" class="community-status" role="status" aria-live="polite"></div>
+<div class="community-auth"><span id="community-auth-status">Checking GitHub verification…</span><button id="community-signin" type="button" class="button" hidden>Verify with GitHub</button><button id="community-signout" type="button" class="button" hidden>Sign out</button></div><div id="community-status" class="community-status" role="status" aria-live="polite"></div>
 <div id="discussion-list" class="panel community-list" aria-label="Discussions"></div>
 <section id="discussion-detail" hidden></section>
 <section id="composer" class="panel composer" hidden><h2 id="composer-title">Start a discussion</h2><p id="composer-intro">What would you like to see added to Wgit?</p><form id="post-form"><label id="title-label" for="post-title">Title</label><input id="post-title" maxlength="120" placeholder="Give your idea a title" /><label for="post-body">Message</label><textarea id="post-body" maxlength="4000" rows="7" required placeholder="Share your idea or feedback..."></textarea><div class="composer-footer"><span id="posting-as"></span><div><button class="button" id="cancel-post" type="button">Cancel</button><button class="button primary" type="submit" id="submit-post">Post discussion</button></div></div></form></section></section>
-<aside class="sidebar community-sidebar"><div class="about"><h2>About discussions</h2><p>Share feedback, ask questions, and suggest features for Wgit.</p></div><div class="side-section"><h3>POSTING</h3><p>Posts are public. Your Wgit settings name is shown; otherwise you appear as a guest with your approximate country. GitHub links are not verified. Posts can be deleted only in the browser where they were created.</p><p>To reduce spam, one post per minute is allowed per network address. A salted hash of the address is stored for rate limiting; people sharing an address share the limit.</p><a href="/settings">Change your name in Settings ↗</a></div></aside></main>
+<aside class="sidebar community-sidebar"><div class="about"><h2>About discussions</h2><p>Share feedback, ask questions, and suggest features for Wgit.</p></div><div class="side-section"><h3>POSTING</h3><p>Posts are public. New discussions and replies require GitHub verification and use your verified GitHub username. Older posts are marked unverified. Posts can be deleted only in the browser where they were created.</p><p>To reduce spam, one post per minute is allowed per network address. A salted hash of the address is stored for rate limiting; people sharing an address share the limit.</p><a href="/settings">Change your name in Settings ↗</a></div></aside></main>
 <footer><div><span class="footer-logo">${icon('git-branch')}</span> <strong>Wgit</strong><span>Made by Buffer</span><span>© 2026 Wgit contributors</span></div><div><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">GitHub ${icon('arrow-up-right')}</a></div></footer>`;
 const $ = s => document.querySelector(s);
 let theme; try { theme = localStorage.getItem('wgit.theme'); } catch {}
 function setTheme(value, persist = false) { document.documentElement.dataset.theme = value; $('#theme-toggle').setAttribute('aria-label', value === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'); $('#theme-toggle').setAttribute('aria-pressed', String(value === 'dark')); $('#theme-toggle').innerHTML = icon(value === 'dark' ? 'sun' : 'moon'); createIcons({ icons }); if (persist) try { localStorage.setItem('wgit.theme', value); } catch {} }
 setTheme(['dark', 'light'].includes(theme) ? theme : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 $('#theme-toggle').addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark', true));
-let posts = cachedCommunity(), selected = null, replyTo = null, country = null, loading = true;
-let name = '', github = null; try { name = (localStorage.getItem('wgit.name') || '').trim().slice(0, 50); github = name ? githubUsername(localStorage.getItem('wgit.email') || '') : null; } catch {}
+let posts = cachedCommunity(), selected = null, replyTo = null, loading = true, account = null;
 const showStatus = (text, error = false) => { $('#community-status').textContent = text; $('#community-status').classList.toggle('error', error); };
 const element = (tag, className, text) => { const e = document.createElement(tag); e.className = className; if (text != null) e.textContent = text; return e; };
 const date = value => { const d = new Date(value); return Number.isNaN(d.valueOf()) ? '' : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); };
@@ -33,19 +32,24 @@ const slug = post => (post.title || 'discussion').toLowerCase().normalize('NFKD'
 const threadUrl = post => `/community/${slug(post)}--${post.id}`;
 const tokenKey = id => `wgit.community.owner.${id}`;
 const ownerToken = id => { try { return localStorage.getItem(tokenKey(id)); } catch { return null; } };
-function postingName() { let label = 'guest - unknown'; if (country) try { label = `guest - ${(new Intl.DisplayNames(['en'], { type: 'region' }).of(country) || 'unknown').toLowerCase()}`; } catch {} return name || label; }
+async function updateAccount() {
+  try { account = await verifiedUser(); $('#community-auth-status').textContent = account ? `Verified as @${account.login}${account.banned ? ' · banned from posting' : ''}` : 'Verify with GitHub to start or reply to a discussion.'; $('#community-signin').hidden = !!account; $('#community-signout').hidden = !account; $('#submit-post').disabled = !account || account.banned; if (!$('#composer').hidden) $('#posting-as').textContent = account ? `Posting as @${account.login} · public` : 'Verify with GitHub to post.'; } catch (error) { account = null; $('#community-auth-status').textContent = error.message; $('#community-signin').hidden = false; $('#submit-post').disabled = true; }
+}
+$('#community-signin').addEventListener('click', () => signIn().catch(e => showStatus(e.message, true)));
+$('#community-signout').addEventListener('click', () => signOut().then(updateAccount).catch(e => showStatus(e.message, true)));
+updateAccount();
 function navigate(url) { history.pushState(null, '', url); render(); }
 window.addEventListener('popstate', render);
 async function request(url, options) { const response = await fetch(url, options); let data; try { data = await response.json(); } catch { throw new Error('Community is temporarily unavailable. Please try again.'); } if (!response.ok) throw new Error(data.error || 'Community is temporarily unavailable. Please try again.'); return data; }
 function authorNode(post) {
   const wrap = element('span', 'post-author');
   const user = typeof post.github_username === 'string' && /^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/i.test(post.github_username) && !post.github_username.includes('--') ? post.github_username : null;
-  if (user && !post.deleted) {
+  if (user && post.github_id && !post.deleted) {
     const href = `https://github.com/${encodeURIComponent(user)}`;
     const avatar = element('a', 'author-avatar'); avatar.href = href; avatar.target = '_blank'; avatar.rel = 'noopener noreferrer'; avatar.setAttribute('aria-label', `GitHub profile of ${post.author}`);
     const img = element('img', ''); img.src = `${href}.png?size=64`; img.alt = ''; img.loading = 'lazy'; avatar.append(img);
     const link = element('a', 'author-name', post.author); link.href = href; link.target = '_blank'; link.rel = 'noopener noreferrer'; wrap.append(avatar, link);
-  } else wrap.append(element('strong', '', post.author));
+  } else { wrap.append(element('strong', '', post.author)); if (!post.deleted) wrap.append(element('span', 'unverified-label', 'unverified')); }
   return wrap;
 }
 function composer(parent = null) {
@@ -53,7 +57,7 @@ function composer(parent = null) {
   $('#composer-title').textContent = reply ? `Reply to ${parent.author}` : 'Start a discussion';
   $('#composer-intro').textContent = reply ? 'Add to the conversation.' : "What would you like to see added to Wgit?";
   $('#title-label').hidden = reply; $('#post-title').hidden = reply; $('#post-title').required = !reply;
-  $('#post-form').reset(); $('#posting-as').textContent = `Posting as ${postingName()} · public`; $('#submit-post').textContent = reply ? 'Post reply' : 'Post discussion';
+  $('#post-form').reset(); $('#posting-as').textContent = account ? `Posting as @${account.login} · public` : 'Verify with GitHub to post.'; $('#submit-post').disabled = !account || account.banned; $('#submit-post').textContent = reply ? 'Post reply' : 'Post discussion';
   $('#composer').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); (reply ? $('#post-body') : $('#post-title')).focus();
 }
 function actions(post, card) {
@@ -109,13 +113,12 @@ $('#post-form').addEventListener('submit', async event => {
     const ownerHash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))), b => b.toString(16).padStart(2, '0')).join('');
     // Ensure this browser can save deletion keys before publishing.
     localStorage.setItem('wgit.community.storage-check', '1'); localStorage.removeItem('wgit.community.storage-check');
-    const posted = await request(api, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, country, github, title: $('#post-title').value, body: $('#post-body').value, parent: replyTo?.id || null, owner_hash: ownerHash }) });
+    const posted = await apiRequest('', { method: 'POST', data: { title: $('#post-title').value, body: $('#post-body').value, parent: replyTo?.id || null, owner_hash: ownerHash } });
     let keySaved = true; try { localStorage.setItem(tokenKey(posted.id), token); } catch { keySaved = false; }
     const destination = selected ? threadUrl(selected) : threadUrl(posted);
     posts = [...(posts || []), posted]; navigate(destination); showStatus(keySaved ? 'Posted. Please wait one minute before posting again.' : 'Posted, but this browser could not save its deletion key.', !keySaved);
     refresh(true).catch(() => showStatus('Posted, but could not refresh discussions.', true));
   } catch (error) { showStatus(error.message || 'Could not post. Browser storage is required to manage your posts.', true); }
-  finally { button.disabled = false; }
+  finally { button.disabled = !account || account.banned; }
 });
-fetch('/api/community-country').then(r => r.ok ? r.json() : null).then(data => { country = data?.country || null; if (!$('#composer').hidden) $('#posting-as').textContent = `Posting as ${postingName()} · public`; }).catch(() => {});
 render(); refresh().catch(error => { loading = false; if (!posts) showStatus(error.message, true); });
