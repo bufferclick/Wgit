@@ -1,6 +1,6 @@
 {
   "name": "wgit",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,12 +10,14 @@
     "test": "node --test",
     "test:browser": "node browser-tests/workflow.mjs",
     "test:community": "node browser-tests/community.mjs",
-    "test:admin": "node browser-tests/admin-logs.mjs"
+    "test:admin": "node browser-tests/admin-logs.mjs",
+    "test:tools": "node browser-tests/tools.mjs"
   },
   "dependencies": {
     "@isomorphic-git/lightning-fs": "^4.6.2",
     "@supabase/supabase-js": "^2.119.0",
     "buffer": "^6.0.3",
+    "diff": "^8.0.4",
     "isomorphic-git": "^1.33.1",
     "lucide": "^0.468.0"
   },

@@ -1,5 +1,6 @@
 // Release order follows the merged project history, not semantic-version sorting.
 export const releases = [
+  { id:'v0.1.5', label:'v0.1.5', title:'A complete workspace', details:'File browsing, visual diffs and history, command completion, GitHub repository picker, commit composer, snapshots, reply notifications and guided Wgit lessons.' },
   { id:'v0.1.4', label:'v0.1.4', title:'A brighter, faster Wgit', details:'Improved admin deletion reporting, a light terminal, quicker command input, and a demo featuring Wgit’s own files.' },
   { id:'v0.1.3', label:'v0.1.3', title:'Verified community and update logs', details:'GitHub verification for posting, account bans and customizable admin data deletion, update voting, and a ¥ terminal prompt.' },
   { id:'pr-12', label:'v0.1.2', title:'Threads and profiles', details:'Nested replies, shareable discussion and settings URLs, browser-owned deletion, GitHub profiles and avatars, preloading, and a green Git terminal icon.' },

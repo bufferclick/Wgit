@@ -11,6 +11,7 @@ import { remoteCommand, preparePush, pushBranch } from './remotes.js';
 import { prepareSync, syncBranch } from './sync.js';
 import { prepareAutoPush, autoPush } from './auto-push.js';
 import { readTextFile } from './cat.js';
+import { mountTools } from './workspace-tools.js';
 import { version } from '../package.json';
 import gitIcon from '../favicon.svg';
 import './style.css';
@@ -22,7 +23,7 @@ document.querySelector('#app').innerHTML = `
   <div class="top-right"><span class="open-source">Open source &amp; free</span><button class="theme-button" id="theme-toggle" type="button" aria-label="Switch to dark mode" title="Switch theme">${icon('moon')}</button><button class="settings-button" id="open-settings">${icon('settings')} Settings</button><a class="github-top" href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">${icon('github')} <span>View on GitHub</span> ${icon('arrow-up-right', 'external')}</a></div>
 </header>
 <div class="repo-head"><div class="repo-title"><div class="repo-icon">${icon('book-marked')}</div><a href="https://github.com/bufferclick/Wgit" target="_blank" rel="noopener noreferrer">bufferclick</a><span class="slash">/</span><strong>Wgit</strong><span class="public-pill">Public</span></div></div>
-<nav class="tabs" aria-label="Project navigation"><div class="tabs-inner"><a class="tab active" href="/">${icon('code-xml')} Workspace</a><a class="tab" href="/community">${icon('message-square')} Community</a><a class="tab" href="/logs">${icon('history')} Logs</a></div></nav>
+<nav class="tabs" aria-label="Project navigation"><div class="tabs-inner"><a class="tab active" href="/">${icon('code-xml')} Workspace</a><a class="tab" href="/community">${icon('message-square')} Community</a><a class="tab" href="/notifications">Notifications</a><a class="tab" href="/logs">${icon('history')} Logs</a></div></nav>
 <main id="workspace" class="layout">
   <section class="main-column">
     <div class="workspace-label"><img src="${gitIcon}" alt="" /><h1>Browser-based Git workspace</h1></div>
@@ -175,6 +176,24 @@ body.addEventListener('pointerup', async () => {
     showCopyState(copied ? 'Copied' : 'Copy blocked — use Ctrl/Cmd+C', !copied);
   }
 });
+const completions = ['help','pwd','ls','cat','cd','clear','git init','git status','git add','git commit','git log','git ls-files','git branch','git switch','git checkout','git config','git remote','git sync','git push','wgit push'];
+input.addEventListener('keydown', async e => {
+  if (e.key !== 'Tab' || !input.value.trim() || input.selectionStart !== input.value.length) return;
+  e.preventDefault(); const original=input.value; let matches=[];
+  const parts=original.split(/\s+/), trailing=/\s$/.test(original);
+  try {
+    if (fs && /^(?:cat|cd|git add)\s+/.test(original) && !/["']/.test(original)) {
+      const fragment=trailing?'':parts.at(-1), slash=fragment.lastIndexOf('/'), folder=slash>=0?fragment.slice(0,slash+1):'', prefix=fragment.slice(slash+1), path=resolve(folder || '.');
+      if(path !== '/workspace' && !path.startsWith('/workspace/')) return;
+      for(const name of await fs.promises.readdir(path)){ if(!name.startsWith(prefix) || name==='.git') continue; const stat=await fs.promises.stat(`${path}/${name}`); if(original.startsWith('cd ') && !stat.isDirectory())continue; const full=folder+name+(stat.isDirectory()?'/':''); matches.push((/\s/.test(full)?`"${full}"`:full)); }
+      const base=original.slice(0,original.length-fragment.length);matches=matches.map(x=>base+x);
+    } else if (repo && /^git (?:switch|checkout)\s+/.test(original)) { const prefix=trailing?'':parts.at(-1),base=original.slice(0,original.length-prefix.length); matches=(await git.listBranches({fs,dir:repo})).filter(x=>x.startsWith(prefix)).map(x=>base+x); }
+    else matches=completions.filter(x=>x.startsWith(original));
+  } catch { return; }
+  if(input.value!==original || !matches.length)return;
+  if(matches.length===1) input.value=matches[0];
+  else { let common=matches[0]; for(const m of matches.slice(1)){let i=0;while(i<common.length && common[i]===m[i])i++;common=common.slice(0,i);} if(common.length>original.length) input.value=common; else print(matches.join('  ')); }
+});
 input.addEventListener('keydown', e => { if (e.key === 'ArrowUp') { e.preventDefault(); if (historyIndex > 0) input.value = history[--historyIndex]; } if (e.key === 'ArrowDown') { e.preventDefault(); if (historyIndex < history.length) historyIndex++; input.value = history[historyIndex] || ''; } });
 function tokenize(str) { const tokens = []; const re = /(?:[^\s"']+|"[^"]*"|'[^']*')+/g; for (const match of str.matchAll(re)) tokens.push(match[0].replace(/"([^"]*)"|'([^']*)'/g, (_, a, b) => a ?? b)); return tokens; }
 const help = `Available commands\n  pwd                     Show the current folder\n  ls                      List files and folders\n  cat <file>              Display a UTF-8 text file\n  cd <folder>             Change folder (cd .. to go back)\n  clear                   Clear terminal output\n  git init                Initialize a repository\n  git status [-s]         Show changed files\n  git add <file|.>        Stage files\n  git commit -m "message"  Commit staged changes\n  git log [--oneline] [-n N]  Show commit history\n  git ls-files            List tracked files\n  git branch [name]       List or create branches\n  git branch -M <name>    Rename the current branch\n  git switch <branch>     Switch branches\n  git switch -c <branch>  Create and switch to a branch\n  git config user.name <name>\n  git config user.email <email>\n  git config --get user.name|user.email\n  git remote add <name> <https-url>  Add a GitHub remote\n  git remote -v           List remotes\n  git remote set-url <name> <url>  Change a remote\n  git remote remove <name>       Remove a remote\n  git sync <remote> <branch>      Merge remote history safely\n  git push -u <remote> <branch>   Push and set upstream\n  git push                Push the current branch to its upstream\n  wgit push <branch>      Stage, commit, sync if needed, and push to origin\n\nGitHub HTTPS push is supported. wgit push stages all non-ignored changes and creates an automatic commit. Conflicts require your choice; no force push is used. Use git sync before a regular push when the remote has existing history. Other hosts, force pushes, pull and shell commands are not supported yet.`;
@@ -308,4 +327,15 @@ $('#terminal-form').addEventListener('submit', e => {
   e.preventDefault(); const line = input.value.trim(); if (!line) return;
   if (/https?:\/\/[^\s/]*@/i.test(line) || /https?:\/\/[^\s]*[?#]/i.test(line)) { input.value = ''; print('Do not put credentials in a URL or terminal command. Use the secure push dialog instead.', 'error'); return; }
   history.push(line); historyIndex = history.length; input.value = ''; commandQueue.push(line); void runQueue();
+});
+
+mountTools({
+  getState: () => ({ fs, repo, cwd, name: rootName }), identity, refresh,
+  insertCommand: value => { input.value = value; input.focus(); },
+  openDemo: () => $('#try-demo').click(), openFolder: () => $('#open-folder').click(),
+  exclusive: async fn => {
+    if (busy) throw new Error('Wait for the current command or operation to finish.');
+    busy = true;
+    try { return await fn(); } finally { busy = false; if (commandQueue.length) void runQueue(); }
+  }
 });
