@@ -26,7 +26,7 @@ const errors = [];
 page.on('pageerror', error => errors.push(error.message));
 try {
   await page.goto(process.env.WGit_URL || 'http://localhost:4173/');
-  assert.match(await page.locator('.version-badge').textContent(), /v0\.0\.7/);
+  assert.match(await page.locator('.version-badge').textContent(), /v0\.0\.8/);
   assert.equal(await page.title(), 'Wgit');
   assert.ok((await page.locator('link[rel=icon]').getAttribute('href')).includes('favicon'));
   assert.match(await page.locator('footer').textContent(), /Made by Buffer/);
@@ -45,6 +45,10 @@ try {
   await page.locator('#theme-toggle').click(); assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
   await page.locator('#theme-toggle').click();
   assert.match(await page.locator('.about').textContent(), /Web-Git/);
+  assert.equal(await page.locator('.workspace-label h1').textContent(), 'Browser-based Git workspace');
+  assert.equal(await page.getByText('Git, right where you are').count(), 0);
+  assert.equal(await page.getByText('Made for builders').count(), 0);
+  assert.equal(await page.locator('.workspace-label img').evaluate(img => img.complete && img.naturalWidth > 0), true);
   // Use a real browser filesystem handle from OPFS in place of the interactive
   // directory picker. This exercises nativeFS and browser Git, not Node globals.
   await page.evaluate(async () => {
@@ -167,7 +171,7 @@ try {
   await command('git log', /First commit/);
   await command('git branch feature', /Created branch feature/);
   await command('git switch feature', /Switched to branch/);
-  await command('git --version', /Wgit v0\.0\.7/);
+  await command('git --version', /Wgit v0\.0\.8/);
 
   // A real pointer drag selects terminal output, copies it and leaves it selected.
   const versionLine = page.locator('#terminal-output .output-line').last();
