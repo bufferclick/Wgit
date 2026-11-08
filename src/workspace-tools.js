@@ -58,16 +58,43 @@ export function mountTools({ getState, exclusive, refresh, identity, insertComma
     form.onsubmit=e=>{e.preventDefault();const messageText=field.value.trim(); if(!messageText)return;act(async()=>{const author=await identity(opts); if(!author.name||!author.email)throw new Error('Set your name and GitHub email in Settings first.'); const current=await git.statusMatrix(opts); if(!current.some(([,h,,s])=>h!==s))throw new Error('Nothing is staged anymore.'); const oid=await git.commit({...opts,author,message:messageText}); await refresh(); await commitView(); message(`Created commit ${oid.slice(0,7)}.`);});};
   }
   addAction('Commit','Commit staged files',()=>{show('Commit');act(commitView);});
-  async function repoPicker(page=1) {
-    content.replaceChildren(); const note=el('p','tool-muted','Connect with GitHub OAuth to list your repositories. The repo scope grants broad read and write access to private repositories, even though this picker only reads. You can revoke it in GitHub settings. OAuth is not used for Git pushes; those still use your separate PAT.');content.append(note);
-    if (!getState().fs) { content.append(el('p','tool-muted','After GitHub redirects back, reopen your folder or demo before choosing a remote.')); const open=el('div','tool-bar'); open.append(button('Open folder',()=>{dialog.close();openFolder();}),button('Open demo',()=>{dialog.close();openDemo();})); content.append(open); }
-    const token=await providerToken(); content.append(button(token?'Reconnect GitHub with repository access':'Connect GitHub for repository access',()=>{if(confirm('GitHub will request repo access, including write access to private repositories. Continue?')) { try { sessionStorage.setItem('wgit.open-repo-picker','1'); } catch {} connectRepositories().catch(e=>message(e.message,true)); }}));
+  async function repoPicker() {
+    content.replaceChildren();
+    const note=el('p','tool-muted','Connect with GitHub OAuth to list your repositories. The repo scope grants broad read and write access to private repositories, even though this picker only reads. You can revoke it in GitHub settings. OAuth is not used for Git pushes; those still use your separate PAT.'); content.append(note);
+    const state=getState();
+    if (!state.fs) { content.append(el('p','tool-muted','Open a folder or the demo before choosing a remote.')); const open=el('div','tool-bar'); open.append(button('Open folder',()=>{dialog.close();openFolder();}),button('Open demo',()=>{dialog.close();openDemo();})); content.append(open); }
+    else if (!state.repo) { const hint=el('p','repo-init-hint'); hint.append(document.createTextNode('Initialize Git in this folder first by running ')); const init=button('git init',()=>{dialog.close();insertCommand('git init');},'text-button'); hint.append(init,document.createTextNode('.')); content.append(hint); }
+    const token=await providerToken();
+    content.append(button(token?'Reconnect GitHub with repository access':'Connect GitHub for repository access',()=>{if(confirm('GitHub will request repo access, including write access to private repositories. Continue?')) { try { sessionStorage.setItem('wgit.open-repo-picker','1'); } catch {} connectRepositories().catch(e=>message(e.message,true)); }}));
     if(!token){content.append(el('p','tool-empty','Connect to load repositories.'));return;}
-    let repos; try{repos=await listGithubRepos(token,page);}catch(e){content.append(el('p','tool-error',e.message));return;}
-    if (repos.scopes !== null && !repos.scopes.split(',').map(x=>x.trim()).includes('repo')) content.append(el('p','tool-error','Private repository access is not granted. Reconnect GitHub above and approve the repo permission.'));
-    content.append(el('p','tool-muted',`Page ${page} · ${repos.length} repositories. Private repositories are included when GitHub has granted repo access. Selecting one sets origin; it does not upload or clone.`));
-    for(const r of repos) content.append(button(`${r.name} ${r.private?'· private':'· public'}`,()=>act(async()=>{const {fs,repo}=workspace(true),opts={fs,dir:repo}; const old=(await git.listRemotes(opts)).find(x=>x.remote==='origin'); if(old && await git.getConfig({...opts,path:'remote.origin.pushurl'})) throw new Error('Origin has a separate push URL. Remove it explicitly before changing origin.'); if(old&&!confirm(`Replace the existing origin with ${r.url}? This does not push or change files.`))return; if(old) await git.setConfig({...opts,path:'remote.origin.url',value:r.url}); else await git.addRemote({...opts,remote:'origin',url:r.url}); await refresh(); dialog.close();}), 'tool-row'));
-    const pages=el('div','tool-bar');if(page>1)pages.append(button('← Previous',()=>act(()=>repoPicker(page-1))));if(repos.length===50)pages.append(button('Next →',()=>act(()=>repoPicker(page+1))));content.append(pages);
+    const label=el('label','repo-search-label','Search repositories'); const search=el('input','repo-search'); search.type='search'; search.placeholder='Find a repository…'; search.autocomplete='off'; label.append(search); content.append(label);
+    const info=el('p','tool-muted repo-results-status','Loading repositories…'); info.setAttribute('role','status'); info.setAttribute('aria-live','polite'); const list=el('div','repo-results'); const pages=el('div','tool-bar'); content.append(info,list,pages);
+    const cache=new Map(); let generation=0, timer;
+    async function fetchPage(page) { if(!cache.has(page)) { const promise=listGithubRepos(token,page).catch(error=>{cache.delete(page);throw error;}); cache.set(page,promise); } return cache.get(page); }
+    function scopeWarning(repos) { if (repos.scopes !== null && !repos.scopes.split(',').map(x=>x.trim()).includes('repo')) { const warning=el('p','tool-error','Private repository access is not granted. Reconnect GitHub above and approve the repo permission.'); if(!content.querySelector('.repo-scope-warning')) { warning.classList.add('repo-scope-warning'); label.before(warning); } } }
+    function showRows(repos) {
+      list.replaceChildren();
+      if(!repos.length) { list.append(el('p','tool-empty','No matching repositories found.')); return; }
+      for(const r of repos) list.append(button(`${r.name} ${r.private?'· private':'· public'}`,()=>act(async()=>{
+        const {fs,repo}=workspace(true),opts={fs,dir:repo}; const old=(await git.listRemotes(opts)).find(x=>x.remote==='origin');
+        if(old && await git.getConfig({...opts,path:'remote.origin.pushurl'})) throw new Error('Origin has a separate push URL. Remove it explicitly before changing origin.');
+        if(old&&!confirm(`Replace the existing origin with ${r.url}? This does not push or change files.`))return;
+        if(old) await git.setConfig({...opts,path:'remote.origin.url',value:r.url}); else await git.addRemote({...opts,remote:'origin',url:r.url}); await refresh(); dialog.close();
+      }), 'tool-row'));
+    }
+    async function browsePage(page=1) {
+      const request=++generation; pages.replaceChildren(); info.textContent='Loading repositories…';
+      try { const repos=await fetchPage(page); if(request!==generation || !info.isConnected || !dialog.open) return; scopeWarning(repos); showRows(repos); info.textContent=`Page ${page} · ${repos.length} repositories. Selecting one sets origin; it does not upload or clone.`;
+        if(page>1)pages.append(button('← Previous',()=>browsePage(page-1))); if(repos.pageSize===50)pages.append(button('Next →',()=>browsePage(page+1)));
+      } catch(error) { if(request===generation && info.isConnected) { info.textContent=error.message; list.replaceChildren(); } }
+    }
+    async function find(term,request) {
+      const found=[]; let scanned=0; pages.replaceChildren(); list.replaceChildren();
+      try { for(let page=1;;page++) { const repos=await fetchPage(page); if(request!==generation || !info.isConnected || !dialog.open) return; scopeWarning(repos); scanned+=repos.pageSize; found.push(...repos.filter(r=>r.name.toLowerCase().includes(term))); showRows(found); info.textContent=`Searching… ${found.length} matching repositories across ${scanned} checked.`; if(repos.pageSize<50) { info.textContent=`${found.length} matching repositories · ${scanned} checked.`; return; } }
+      } catch(error) { if(request===generation && info.isConnected) info.textContent=`Search stopped: ${error.message}`; }
+    }
+    search.addEventListener('input',()=>{ clearTimeout(timer); const term=search.value.trim().toLowerCase(); const request=++generation; if(!term) { void browsePage(); return; } pages.replaceChildren(); list.replaceChildren(); info.textContent='Searching repositories…'; timer=setTimeout(()=>void find(term,request),250); });
+    await browsePage();
   }
   document.querySelector('#select-github-repo').addEventListener('click',()=>{show('GitHub repositories');act(()=>repoPicker());});
   async function snapshotsView() {

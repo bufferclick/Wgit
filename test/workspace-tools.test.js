@@ -23,3 +23,12 @@ test('notifications include replies to owned ancestors, excluding self, unrelate
 test('repository picker calls only the GitHub API and rejects unsafe repository URLs', async () => {
   const original=globalThis.fetch;let request;try{globalThis.fetch=async (url,opts)=>{request={url,opts};return new Response(JSON.stringify([{full_name:'owner/repo',html_url:'https://github.com/owner/repo',private:true}]), {headers:{'x-oauth-scopes':'repo, read:user'}});};const rows=await listGithubRepos('mock-token');assert.equal(rows[0].url,'https://github.com/owner/repo.git');assert.equal(rows.scopes,'repo, read:user');assert.match(request.url,/^https:\/\/api.github.com\/user\/repos/);assert.equal(request.opts.headers.Authorization,'Bearer mock-token');globalThis.fetch=async()=>new Response(JSON.stringify([{full_name:'bad',html_url:'https://evil.example/steal'}]));await assert.rejects(()=>listGithubRepos('mock-token'),/GitHub/);}finally{globalThis.fetch=original;}
 });
+
+
+test('repository pagination uses the unfiltered API page length and supports deep pages', async () => {
+  const original=globalThis.fetch;
+  try {
+    globalThis.fetch=async()=>new Response(JSON.stringify(Array.from({length:50},(_,i)=>({full_name:i===0?'x'.repeat(250):`owner/repo-${i}`,html_url:`https://github.com/owner/repo-${i}`,private:true}))));
+    const rows=await listGithubRepos('mock-token',101); assert.equal(rows.length,49); assert.equal(rows.pageSize,50);
+  } finally { globalThis.fetch=original; }
+});

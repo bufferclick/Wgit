@@ -10,6 +10,7 @@ function render() {
   const list = $('#release-list'); list.replaceChildren();
   for (const r of releases) {
     const item = node('article', 'release-item'); const top = node('div', 'release-title'); top.append(node('span', 'release-version', r.label), node('h2', '', r.title)); item.append(top, node('p', 'release-details', r.details));
+    const details = node('ul', 'release-changes'); for (const change of r.changes) details.append(node('li', '', change)); item.append(details);
     const votes = totals.find(x => x.release_id === r.id) || {}; const current = mine.find(x => x.release_id === r.id)?.direction || 0; const bar = node('div', 'vote-actions');
     for (const [direction, text, count] of [[1, '↑ Upvote', votes.upvotes || 0], [-1, '↓ Downvote', votes.downvotes || 0]]) {
       const button = node('button', 'vote-button', `${text} ${count}`); button.type = 'button'; button.disabled = !user; button.setAttribute('aria-pressed', String(current === direction));

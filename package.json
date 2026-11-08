@@ -1,6 +1,6 @@
 {
   "name": "wgit",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,7 +11,8 @@
     "test:browser": "node browser-tests/workflow.mjs",
     "test:community": "node browser-tests/community.mjs",
     "test:admin": "node browser-tests/admin-logs.mjs",
-    "test:tools": "node browser-tests/tools.mjs"
+    "test:tools": "node browser-tests/tools.mjs",
+    "test:releases": "node browser-tests/releases.mjs"
   },
   "dependencies": {
     "@isomorphic-git/lightning-fs": "^4.6.2",
