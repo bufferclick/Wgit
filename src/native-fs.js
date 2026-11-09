@@ -55,9 +55,12 @@ export function nativeFS(root) {
       return encoding ? data.text() : new Uint8Array(await data.arrayBuffer());
     },
     async writeFile(path, data) {
-      const handle = await file(path, true), writable = await handle.createWritable();
-      await writable.write(typeof data === 'string' ? data : new Uint8Array(data));
-      await writable.close();
+      let writable;
+      try {
+        const handle = await file(path, true); writable = await handle.createWritable();
+        await writable.write(typeof data === 'string' ? data : new Uint8Array(data));
+        await writable.close();
+      } catch (cause) { if (writable?.abort) await writable.abort().catch(() => {}); throw mapError(cause, path, 'EISDIR'); }
     },
     async mkdir(path) {
       const [dir, name] = await parent(path);
