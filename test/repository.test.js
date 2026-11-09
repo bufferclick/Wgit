@@ -31,6 +31,7 @@ class DirectoryHandle {
   }
   async getFileHandle(name, { create = false } = {}) {
     const filename = path.join(this.dir, name);
+    if (this.options.blockConfig && create && name === 'config' && path.basename(this.dir) === '.git') throw new DOMException('Blocked by the user agent', 'SecurityError');
     try {
       if (create) await nodeFs.appendFile(filename, '');
       const stat = await nodeFs.stat(filename);
@@ -108,4 +109,15 @@ test('does not suppress security errors for other Git directories', async t => {
   const { fs } = await workspace(t, { blockInfo: true });
   await assert.rejects(initRepository(fs, '/workspace'), { code: 'EACCES' });
   assert.notEqual(await repositoryState(fs, '/workspace'), 'ready');
+});
+
+
+test('blocked .git/config is reported and a failed init never deletes or replaces it on retry', async t => {
+  const {dir,fs}=await workspace(t,{blockConfig:true});await nodeFs.writeFile(path.join(dir,'README.md'),'keep me');
+  await assert.rejects(initRepository(fs,'/workspace'),/Browser blocked access to \/workspace\/\.git\/config/);
+  assert.equal(await repositoryState(fs,'/workspace'),'incomplete');
+  const before=(await nodeFs.readdir(path.join(dir,'.git'))).sort();
+  await assert.rejects(initRepository(fs,'/workspace'),/will not overwrite/);
+  assert.deepEqual((await nodeFs.readdir(path.join(dir,'.git'))).sort(),before);
+  assert.equal(await nodeFs.readFile(path.join(dir,'README.md'),'utf8'),'keep me');
 });

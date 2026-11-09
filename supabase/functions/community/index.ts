@@ -4,7 +4,7 @@ const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers
 const respond = (status, value) => new Response(JSON.stringify(value), { status, headers: cors });
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const github = /^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/i;
-const releases = new Set(['pr-1','pr-2','pr-3','pr-4','pr-5','pr-6','pr-7','pr-8','pr-9','pr-11','pr-12','v0.1.3','v0.1.4','v0.1.5','v0.1.6','v0.1.7']);
+const releases = new Set(['pr-1','pr-2','pr-3','pr-4','pr-5','pr-6','pr-7','pr-8','pr-9','pr-11','pr-12','v0.1.3','v0.1.4','v0.1.5','v0.1.6','v0.1.7','v0.1.8']);
 const base = Deno.env.get('SUPABASE_URL'), key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'), salt = Deno.env.get('COMMUNITY_IP_SALT');
 const dbHeaders = { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
 const hash = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))), b => b.toString(16).padStart(2, '0')).join('');

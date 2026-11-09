@@ -7,6 +7,7 @@ import LightningFS from '@isomorphic-git/lightning-fs';
 import { createIcons, GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, CircleDot, Terminal, FolderOpen, Trash2, Command, Link, Folder, ArrowUpLeft, Settings, MessageSquare, History, Maximize2, Minimize2, Moon, Sun, Bell, ChevronDown } from 'lucide';
 const icons = { GitBranch, Github, ArrowUpRight, BookMarked, CodeXml, CircleDot, Terminal, FolderOpen, Trash2, Command, Link, Folder, ArrowUpLeft, Settings, MessageSquare, History, Maximize2, Minimize2, Moon, Sun, Bell, ChevronDown };
 import { nativeFS } from './native-fs.js';
+import { importFolderCopy } from './folder-copy.js';
 import { repositoryState, initRepository, incompleteMessage } from './repository.js';
 import { remoteCommand, preparePush, pushBranch } from './remotes.js';
 import { prepareSync, syncBranch } from './sync.js';
@@ -29,7 +30,7 @@ document.querySelector('#app').innerHTML = `
 <main id="workspace" class="layout">
   <section class="main-column">
     <div class="workspace-label"><img src="${gitIcon}" alt="" /><h1>Browser-based Git workspace</h1></div>
-    <div class="panel folder-panel"><div class="folder-illustration">${icon('folder-open')}</div><div class="folder-copy"><div class="folder-title" id="folder-title">Open a project folder</div><div class="folder-description" id="folder-description">Choose a local folder to use with Git.</div></div><button class="button primary" id="open-folder">${icon('folder-open')} Open folder</button></div>
+    <div class="panel folder-panel"><div class="folder-illustration">${icon('folder-open')}</div><div class="folder-copy"><div class="folder-title" id="folder-title">Open a project folder</div><div class="folder-description" id="folder-description">Choose a local folder to use with Git.</div></div><div class="folder-actions"><button class="button" id="open-folder-copy" type="button">Open folder copy</button><button class="button primary" id="open-folder">${icon('folder-open')} Open folder</button></div><input id="folder-copy-input" type="file" webkitdirectory multiple hidden /></div>
     <div class="terminal panel"><div class="terminal-top"><div class="terminal-title">${icon('terminal')} <strong>Terminal</strong><span class="terminal-divider"></span><span>Wgit shell</span></div><div class="terminal-actions"><span id="copy-state" role="status" aria-live="polite">Select text to copy</span><button id="fullscreen-terminal" class="icon-button" title="Expand terminal" aria-label="Expand terminal">${icon('maximize-2')}</button><button id="clear-terminal" class="icon-button" title="Clear terminal" aria-label="Clear terminal">${icon('trash-2')}</button></div></div><div class="terminal-body" id="terminal-body"><div class="terminal-welcome"><div class="terminal-hint">Open a folder or type <span>help</span> for commands.</div></div><div id="terminal-output" aria-live="polite"></div><form id="terminal-form" autocomplete="off"><label for="command-input" class="prompt"><svg class="prompt-git" viewBox="0 0 32 32" aria-hidden="true"><path fill="#3fb950" d="M14.59 1.17a2 2 0 0 1 2.82 0l13.42 13.42a2 2 0 0 1 0 2.82L17.41 30.83a2 2 0 0 1-2.82 0L1.17 17.41a2 2 0 0 1 0-2.82z"/><path d="M9.3 5.9 13.1 9.7v8.2m0-8.2 7.2 7.2" fill="none" stroke="#0d1117" stroke-width="2.1" stroke-linecap="round"/><circle cx="13.1" cy="9.7" r="2.1" fill="#0d1117"/><circle cx="13.1" cy="19.2" r="2.1" fill="#0d1117"/><circle cx="21.1" cy="17.7" r="2.1" fill="#0d1117"/></svg> <span class="prompt-path" id="prompt-path">$</span></label><input id="command-input" aria-label="Terminal command" spellcheck="false" placeholder="Type a command..." /></form></div><div class="terminal-bottom"><span>${icon('command')} Wgit shell <span class="terminal-shortcut">· ↑ ↓ command history</span></span><span>Type <kbd>help</kbd> for a list of commands</span></div></div>
     <div class="repository-selector"><button id="select-github-repo" type="button" aria-label="Select GitHub repository">${icon('github')} <span id="selected-repo-label">Select GitHub repository</span> ${icon('chevron-down')}</button><span class="repo-picker-hint">Choose a remote for this folder</span></div>
     <div class="demo-row"><span>Demo project: Wgit files · stored in browser only</span><button id="try-demo" type="button">Open demo</button></div>
@@ -42,7 +43,7 @@ setupReleaseIndicator();
 const $ = s => document.querySelector(s);
 const input = $('#command-input'), output = $('#terminal-output'), body = $('#terminal-body');
 let fs = null, cwd = '/workspace', rootName = '', repo = null, history = [], historyIndex = 0, busy = false;
-let workspaceType = null, restoringWorkspace = false;
+let workspaceType = null, workspaceId = null, restoringWorkspace = false;
 const pfs = () => fs.promises;
 const themeToggle = $('#theme-toggle');
 function setTheme(theme, persist = false) {
@@ -129,24 +130,42 @@ async function refresh() {
   }
 }
 async function setWorkspace(newFs, name, demo = false, options = {}) {
-  fs = newFs; cwd = options.cwd || '/workspace'; rootName = name; workspaceType = demo ? 'demo' : 'folder';
+  fs = newFs; cwd = options.cwd || '/workspace'; rootName = name; workspaceType = options.type || (demo ? 'demo' : 'folder'); workspaceId = options.id || null;
   $('#reconnect-folder')?.remove();
   $('#folder-title').textContent = name;
-  $('#folder-description').textContent = demo ? 'A sandbox saved in this browser. Your local files are untouched.' : 'Local folder connected. Commands run directly on your files.';
-  $('#side-folder').textContent = name; $('#side-detail').textContent = demo ? 'Browser demo workspace' : 'Local folder connected';
+  $('#folder-description').textContent = workspaceType === 'copy' ? 'Browser-stored copy; original files and Git history are not changed.' : demo ? 'A sandbox saved in this browser. Your local files are untouched.' : 'Local folder connected. Commands run directly on your files.';
+  $('#side-folder').textContent = name; $('#side-detail').textContent = workspaceType === 'copy' ? 'Browser-stored folder copy' : demo ? 'Browser demo workspace' : 'Local folder connected';
   $('#open-folder').innerHTML = `${icon('folder-open')} Change folder`; createIcons({ icons });
-  if (!options.silent) print(`Opened ${demo ? 'demo workspace' : 'folder'}: ${name}`, 'success'); await refresh(); if (!options.silent) input.focus();
+  if (!options.silent) print(`Opened ${workspaceType === 'copy' ? 'browser-stored folder copy' : demo ? 'demo workspace' : 'folder'}: ${name}`, 'success'); await refresh(); if (!options.silent) input.focus();
 }
 async function chooseFolder() {
   if (busy || restoringWorkspace) return;
-  if (!window.showDirectoryPicker) { print('Folder access is not supported in this browser. Try a Chromium-based browser, or use the demo workspace.', 'error'); input.focus(); return; }
+  if (!window.showDirectoryPicker) { print('Direct folder access is unavailable in this browser. Use Open folder copy to work with a browser-stored copy instead.', 'error'); input.focus(); return; }
   try { const handle = await window.showDirectoryPicker({ mode: 'readwrite' }); try { await saveHandle(handle); } catch {} await setWorkspace(nativeFS(handle), handle.name); }
   catch (e) { if (e.name !== 'AbortError') print(`Could not open folder: ${e.message}`, 'error'); }
 }
 $('#open-folder').addEventListener('click', chooseFolder);
+const folderCopyInput = $('#folder-copy-input');
+$('#open-folder-copy').addEventListener('click', () => {
+  if (busy || restoringWorkspace) return;
+  if (!confirm('Open a browser-stored COPY of this folder? Files are stored unencrypted in this browser. Changes do not sync back to your original folder. Existing .git folders and history are NOT imported; you will start a separate Git repository. The copy can be reopened in this tab, but closing the tab loses access to it. Back up important work. Select only a folder you trust. Continue?')) return;
+  folderCopyInput.value = ''; folderCopyInput.click();
+});
+folderCopyInput.addEventListener('change', async () => {
+  if (!folderCopyInput.files?.length || busy || restoringWorkspace) return;
+  busy = true; const id = `wgit-folder-copy-${crypto.randomUUID()}`;
+  try {
+    const copyFS = new LightningFS(id); print('Copying selected files into browser storage…');
+    const result = await importFolderCopy(copyFS, folderCopyInput.files);
+    await copyFS.promises.flush();
+    await setWorkspace(copyFS, result.name, false, {type:'copy', id});
+    print(`Copied ${result.files} files. Original files are unchanged; existing .git folders and history were not imported. Run git init to start a new repository.`, 'success');
+  } catch (error) { print(`Could not open folder copy: ${error.message}. No workspace was opened; your original files were not changed.`, 'error'); }
+  finally { busy = false; folderCopyInput.value = ''; if (commandQueue.length) void runQueue(); input.focus(); }
+});
 $('#try-demo').addEventListener('click', async () => {
   if (busy || restoringWorkspace) return;
-  try { const demoFS = new LightningFS('wgit-demo-wgit'); const { openDemo } = await import('./demo.js'); await openDemo(demoFS); await setWorkspace(demoFS, 'Wgit (demo)', true); }
+  try { const demoFS = new LightningFS('wgit-demo-wgit'); const { openDemo } = await import('./demo.js'); await openDemo(demoFS); await demoFS.promises.flush(); await setWorkspace(demoFS, 'Wgit (demo)', true); }
   catch (e) { print(`Could not open demo: ${e.message}`, 'error'); }
 });
 $('#clear-terminal').addEventListener('click', () => { output.replaceChildren(); rememberWorkspace(); input.focus(); });
@@ -244,7 +263,7 @@ async function command(line) {
     return print(`Pushed ${target.branch} to ${target.url} branch ${target.remoteBranch}${result.synced ? ' after syncing' : ''}.`, 'success');
   }
   if (sub === '--version' || sub === 'version') return print(`Wgit v${version} · powered by isomorphic-git`);
-  if (sub === 'init') { if (args.length) throw new Error('Use cd to choose a folder before running git init.'); await initRepository(fs, cwd); return print(`Initialized empty Git repository in ${displayPath(cwd)}/.git/`, 'success'); }
+  if (sub === 'init') { if (args.length) throw new Error('Use cd to choose a folder before running git init.'); try { await initRepository(fs, cwd); } catch (error) { if (workspaceType === 'folder' && (error.code === 'EACCES' || error.message === incompleteMessage)) throw new Error(`${error.message} Your folder was not deleted. To continue without changing its .git folder, use Open folder copy; it starts separate Git history in browser storage.`); throw error; } return print(`Initialized empty Git repository in ${displayPath(cwd)}/.git/`, 'success'); }
   if (!repo) return print('Not a Git repository. Run git init to create one.', 'error');
   const state = await repositoryState(fs, repo);
   if (state === 'empty') throw new Error('The .git folder is empty from an incomplete initialization. Run git init to retry.');
@@ -321,6 +340,7 @@ async function runQueue() {
       entered.append(document.querySelector('.prompt-git').cloneNode(true), document.createTextNode(` ${fs ? displayPath(cwd).replace(/^~/, '$') : '$'}  ${line}`));
       output.append(entered); body.scrollTop = body.scrollHeight;
       try { await command(line); } catch (err) { print(`Error: ${err.message || err}`, 'error'); }
+      if (fs?.promises?.flush) try { await fs.promises.flush(); } catch (err) { print(`Could not save browser workspace: ${err.message}. Keep this tab open and back up your work.`, 'error'); }
       // Read-only commands do not need an expensive full Git status scan.
       if (/^(?:cd(?:\s|$)|git\s+(?:init|status|add|commit|branch|switch|checkout|sync|push|remote|config)(?:\s|$)|wgit\s+push(?:\s|$))/.test(line)) {
         try { await refresh(); } catch {}
@@ -345,7 +365,7 @@ mountTools({
   exclusive: async fn => {
     if (busy) throw new Error('Wait for the current command or operation to finish.');
     busy = true;
-    try { return await fn(); } finally { busy = false; if (commandQueue.length) void runQueue(); }
+    try { return await fn(); } finally { if (fs?.promises?.flush) try { await fs.promises.flush(); } catch (err) { print(`Could not save browser workspace: ${err.message}. Keep this tab open and back up your work.`, 'error'); } busy = false; if (commandQueue.length) void runQueue(); }
   }
 });
 
@@ -366,15 +386,16 @@ function rememberWorkspace() {
     const heading = file ? item.querySelector('.file-output-heading')?.children[1]?.textContent || 'File' : '';
     lines.push({ text, file, heading, type: item.classList.contains('error') ? 'error' : item.classList.contains('success') ? 'success' : item.classList.contains('entered') ? 'entered' : '' });
   }
-  saveState({type:workspaceType, name:rootName, cwd:validWorkspacePath(cwd)?cwd:'/workspace', history:history.slice(-200).map(line => line.slice(0,4000)), input:input.value.slice(0,4000), lines:lines.reverse()});
+  saveState({type:workspaceType, id:workspaceId, name:rootName, cwd:validWorkspacePath(cwd)?cwd:'/workspace', history:history.slice(-200).map(line => line.slice(0,4000)), input:input.value.slice(0,4000), lines:lines.reverse()});
 }
 window.addEventListener('pagehide', rememberWorkspace);
 async function restoreWorkspace(state) {
-  if (!state || !['demo','folder'].includes(state.type)) return;
+  if (!state || !['demo','folder','copy'].includes(state.type)) return;
   restoringWorkspace = true;
   try {
     let restoredFs;
-    if (state.type === 'demo') { restoredFs = new LightningFS('wgit-demo-wgit'); const { openDemo } = await import('./demo.js'); await openDemo(restoredFs); }
+    if (state.type === 'copy') { if (typeof state.id !== 'string' || !/^wgit-folder-copy-[0-9a-f-]{36}$/i.test(state.id)) throw new Error('Could not restore this folder copy.'); restoredFs = new LightningFS(state.id); if (!(await restoredFs.promises.stat('/workspace')).isDirectory()) throw new Error('The stored folder copy is unavailable.'); }
+    else if (state.type === 'demo') { restoredFs = new LightningFS('wgit-demo-wgit'); const { openDemo } = await import('./demo.js'); await openDemo(restoredFs); }
     else {
       workspaceType = 'folder'; rootName = state.name || ''; cwd = validWorkspacePath(state.cwd) ? state.cwd : '/workspace';
       const handle = await loadHandle();
@@ -400,7 +421,7 @@ async function restoreWorkspace(state) {
     }
     let path = validWorkspacePath(state.cwd) ? state.cwd : '/workspace';
     try { if (!(await restoredFs.promises.stat(path)).isDirectory()) path='/workspace'; } catch { path='/workspace'; }
-    await setWorkspace(restoredFs, state.name || (state.type==='demo'?'Wgit (demo)':'Workspace'), state.type==='demo', {cwd:path,silent:true});
+    await setWorkspace(restoredFs, state.name || (state.type==='demo'?'Wgit (demo)':'Workspace'), state.type==='demo', {cwd:path,silent:true,type:state.type,id:state.id});
   } catch(error) { print(`Could not restore the workspace: ${error.message}`, 'error'); }
   finally { restoringWorkspace = false; }
 }

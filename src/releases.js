@@ -1,5 +1,6 @@
 // Release order follows the merged project history, not semantic-version sorting.
 export const releases = [
+  { id:'v0.1.8', label:'v0.1.8', title:'Folder access fallback', details:'Open a browser-stored copy of a folder when direct access or Git metadata writes are blocked.' },
   { id:'v0.1.7', label:'v0.1.7', title:'A more polished Wgit', details:'A GitHub-style interface, detailed update logs, an unread indicator, and a searchable repository picker.' },
   { id:'v0.1.6', label:'v0.1.6', title:'A smoother workspace', details:'Fixed admin data deletion, improved private repository selection, kept workspace state between pages, and moved tools into a compact sidebar.' },
   { id:'v0.1.5', label:'v0.1.5', title:'A complete workspace', details:'File browsing, visual diffs and history, command completion, GitHub repository picker, commit composer, snapshots, reply notifications and guided Wgit lessons.' },
@@ -21,6 +22,7 @@ export const releases = [
 // Release notes describe the behavior introduced in each update, not promises
 // about integrations that were not part of that release.
 const changes = {
+  'v0.1.8': ['Added Open folder copy for browsers with directory selection but without direct folder access, and for folders where Chromium blocks Git metadata writes.', 'The imported files and new Git history stay in browser storage; the original folder and any existing .git data are not changed or imported.', 'Improved permission errors and explained how to continue without deleting an incomplete repository.'],
   'v0.1.7': ['Reworked the workspace, community, settings, and tools with a consistent GitHub-style design in light and dark modes.', 'Added a blue unread marker for new releases; opening Logs marks the latest update as read on this browser.', 'Search your authorized GitHub repositories across pages, including private repositories when permission is granted.', 'Added a one-click git init suggestion when choosing a remote for an uninitialized folder.'],
   'v0.1.6': ['Fixed admin app-data deletion under Supabase’s safe-update rules; the confirmation flow and category selection remain in place.', 'Moved workspace tools into the sidebar and placed the GitHub repository selector below the terminal.', 'Retained the current folder, path, terminal history, output, and unfinished command between pages; folder permission may need reconnection.', 'Improved private-repository OAuth handling and added a notification icon.'],
   'v0.1.5': ['Added a file browser, a working-tree diff against HEAD, and a graph of local commit history.', 'Introduced Tab completion, a staged-commit composer, and an OAuth-backed GitHub repository picker.', 'Added browser-local file snapshots and an in-app view of replies to your verified discussions and comments.', 'Introduced a guided tour covering Wgit workflows, safety, Git, and GitHub.'],
